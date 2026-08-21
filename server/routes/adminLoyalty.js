@@ -227,11 +227,42 @@ router.put('/redemption-requests/:id', async (req, res) => {
   if (!['PENDING', 'CONTACTED', 'COMPLETED', 'REJECTED'].includes(status)) {
     return res.status(400).json({ error: 'Statut invalide.' });
   }
+  const request = await prisma.loyaltyRedemptionRequest.findUnique({ where: { id: req.params.id } });
+  if (!request) return res.status(404).json({ error: 'Demande introuvable.' });
+
   try {
-    const updated = await prisma.loyaltyRedemptionRequest.update({ where: { id: req.params.id }, data: { status } });
+    const updated = await prisma.$transaction(async (tx) => {
+      // Points are only ever deducted the moment a request FIRST becomes
+      // COMPLETED — never on a later save, so re-saving an already-completed
+      // request can't double-deduct.
+      if (status === 'COMPLETED' && request.status !== 'COMPLETED') {
+        const customer = await tx.customer.findUnique({ where: { phone: request.phone } });
+        if (customer) {
+          const balance = (await tx.loyaltyLedger.aggregate({ where: { customerId: customer.id }, _sum: { points: true } }))._sum.points || 0;
+          let pointsToDeduct = request.pointsAtRequest;
+          if (request.requestedRewardId) {
+            const reward = await tx.loyaltyReward.findUnique({ where: { id: request.requestedRewardId } });
+            if (reward) pointsToDeduct = reward.pointsRequired;
+          }
+          if (pointsToDeduct > 0) {
+            if (balance < pointsToDeduct) throw new Error(`Points insuffisants pour clôturer cette demande (solde actuel : ${balance}).`);
+            await tx.loyaltyLedger.create({
+              data: {
+                customerId: customer.id,
+                type: 'REDEEMED',
+                points: -pointsToDeduct,
+                note: request.requestedRewardName ? `Récompense réclamée : ${request.requestedRewardName}` : 'Points réclamés (demande client)',
+                rewardId: request.requestedRewardId || null,
+              },
+            });
+          }
+        }
+      }
+      return tx.loyaltyRedemptionRequest.update({ where: { id: req.params.id }, data: { status } });
+    });
     res.json(updated);
   } catch (e) {
-    res.status(404).json({ error: 'Demande introuvable.' });
+    res.status(400).json({ error: e.message || 'Impossible de mettre à jour cette demande.' });
   }
 });
 

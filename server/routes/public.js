@@ -108,6 +108,7 @@ router.get('/packs', async (req, res) => {
         size: pack.size,
         price: pack.price,
         collectionSlug: pack.collection.slug,
+        collection: { name: pack.collection.name, slug: pack.collection.slug },
         eligibleProducts: eligibleProducts.map(parseImages),
       };
     })

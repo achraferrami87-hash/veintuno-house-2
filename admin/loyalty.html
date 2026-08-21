@@ -316,7 +316,7 @@ function requestRowHTML(r) {
       <td>${r.requestedRewardName || '—'}</td>
       <td>${formatDate(r.createdAt)}</td>
       <td>
-        <select class="request-status-select" data-id="${r.id}">
+        <select class="request-status-select" data-id="${r.id}" data-current-value="${r.status}">
           ${['PENDING', 'CONTACTED', 'COMPLETED', 'REJECTED'].map((s) => `<option value="${s}" ${r.status === s ? 'selected' : ''}>${s === 'PENDING' ? 'En attente' : s === 'CONTACTED' ? 'Contacté' : s === 'COMPLETED' ? 'Terminé' : 'Rejeté'}</option>`).join('')}
         </select>
       </td>
@@ -333,10 +333,16 @@ document.getElementById('requestStatusFilter').addEventListener('change', loadRe
 document.getElementById('requestsBody').addEventListener('change', async (e) => {
   const select = e.target.closest('.request-status-select');
   if (!select) return;
+  const previousValue = select.dataset.currentValue || select.value;
   try {
     await adminApi(`/loyalty/redemption-requests/${select.dataset.id}`, { method: 'PUT', body: JSON.stringify({ status: select.value }) });
-    toast('Statut mis à jour.');
-  } catch (err) { toast(err.message, 'error'); }
+    select.dataset.currentValue = select.value;
+    toast(select.value === 'COMPLETED' ? 'Demande terminée — les points ont été déduits du solde du client.' : 'Statut mis à jour.');
+    if (select.value === 'COMPLETED') { await Promise.all([loadOverview(), loadCustomers()]); }
+  } catch (err) {
+    select.value = previousValue;
+    toast(err.message, 'error');
+  }
 });
 
 (async () => {

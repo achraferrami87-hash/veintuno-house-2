@@ -831,7 +831,7 @@ async function renderComposeType(container, size) {
 
   grid.innerHTML = packsForSize.map((p) => `
     <a href="#compose/pack/${p.id}" class="chooser-card">
-      <span class="chooser-card__title">${p.collection.name}</span>
+      <span class="chooser-card__title">${p.collection ? p.collection.name : p.name}</span>
       <span class="chooser-card__sub">${size} produits au choix</span>
       <span class="chooser-card__price">${p.price} MAD</span>
     </a>`).join('') || '<p class="admin-field-help">Aucun pack disponible pour cette taille.</p>';
