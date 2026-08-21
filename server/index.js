@@ -3,6 +3,7 @@ const express = require('express');
 const cookieSession = require('cookie-session');
 
 const requireAdmin = require('./middleware/requireAdmin');
+const uploadsPath = require('./uploadsPath');
 
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
@@ -28,6 +29,7 @@ app.use(cookieSession({
   maxAge: 24 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
 }));
 
 // Dashboard edits must show up immediately on the storefront — never let the
@@ -58,7 +60,7 @@ app.use('/api/admin/loyalty', requireAdmin, adminLoyaltyRoutes);
 // ---------- Static files ----------
 // Uploaded media: filenames are unique per upload, but we still force
 // revalidation so an admin's replacement never appears stale.
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+app.use('/uploads', express.static(uploadsPath, {
   setHeaders: (res) => res.set('Cache-Control', 'no-cache'),
 }));
 app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));

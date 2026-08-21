@@ -2,11 +2,12 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
+const uploadsPath = require('../uploadsPath');
 
 const router = express.Router();
 
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '..', '..', 'uploads'),
+  destination: uploadsPath,
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);

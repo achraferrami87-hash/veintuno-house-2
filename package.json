@@ -5,8 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --env-file=.env server/index.js",
-    "start": "node --env-file=.env server/index.js",
-    "seed": "node --env-file=.env prisma/seed.js"
+    "build": "prisma generate",
+    "start": "prisma migrate deploy && node server/index.js",
+    "seed": "node prisma/seed.js",
+    "seed:dev": "node --env-file=.env prisma/seed.js"
   },
   "keywords": [],
   "author": "",
@@ -19,9 +21,7 @@
     "@prisma/client": "^6.19.3",
     "cookie-session": "^2.1.1",
     "express": "^5.2.1",
-    "multer": "^2.2.0"
-  },
-  "devDependencies": {
+    "multer": "^2.2.0",
     "prisma": "^6.19.3"
   },
   "allowScripts": {
