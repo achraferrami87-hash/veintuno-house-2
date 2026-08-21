@@ -30,6 +30,7 @@ model Collection {
   image       String?
   position    Int      @default(0)
   isActive    Boolean  @default(true)
+  showInNav   Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -49,6 +50,7 @@ model Product {
   notesHeart        String?
   notesBase         String?
   gender            String? // homme | femme | unisexe (perfumes only, nullable elsewhere)
+  volume            String?  @default("50ML")
   price             Float
   stock             Int      @default(0)
   lowStockThreshold Int      @default(5)
@@ -208,6 +210,7 @@ model Customer {
 model Order {
   id             String   @id @default(cuid())
   orderNumber    String   @unique
+  clientOrderId  String?  @unique
   fullName       String
   phone          String
   address        String
@@ -361,4 +364,16 @@ model LoyaltyLedger {
   reward   LoyaltyReward? @relation(fields: [rewardId], references: [id])
 
   reversesEntryId String?
+}
+
+// ===========================
+// SITE SETTINGS (WhatsApp, Instagram, misc storefront text)
+// ===========================
+model SiteSettings {
+  id                String   @id @default(cuid())
+  whatsappNumber    String?
+  instagramLink     String?
+  instagramQrImage  String?
+  perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
+  updatedAt         DateTime @updatedAt
 }

@@ -40,7 +40,7 @@
         <div class="nav-dropdown__panel" id="collectionsDropdownPanel"></div>
       </div>
       <div id="navMenuItems" style="display:contents;"></div>
-      <a href="#pack-chooser" class="nav-cta-link">Composer mon pack</a>
+      <a href="#compose" class="nav-cta-link">Composer mon pack</a>
     </nav>
   </div>
 
@@ -105,8 +105,49 @@
   </div>
 </section>
 
+<!-- COMPOSER DE PACK (dedicated page — formula / type / product selection) -->
+<section class="view compose-page" id="view-compose" hidden>
+  <div class="container" id="composeContainer"></div>
+</section>
+
+<!-- PROGRAMME DE FIDÉLITÉ (page) -->
+<section class="view loyalty-page" id="view-loyalty" hidden>
+  <div class="container loyalty-layout">
+    <div class="loyalty-intro">
+      <p class="section__eyebrow">Programme de fidélité</p>
+      <h2 class="section__title">Vos points, vos récompenses</h2>
+      <p class="loyalty-intro__text">Entrez votre numéro de téléphone pour consulter vos points fidélité.</p>
+      <div id="loyaltyHowItWorks" class="loyalty-how"></div>
+    </div>
+    <div class="loyalty-card">
+      <form class="admin-form loyalty-form" id="loyaltyForm">
+        <label>
+          <span>Nom complet</span>
+          <input type="text" name="fullName" required placeholder="Comme sur votre commande">
+        </label>
+        <label>
+          <span>Téléphone</span>
+          <input type="tel" name="phone" required placeholder="06 00 00 00 00">
+        </label>
+        <div id="loyaltyError" class="checkout-form__error" hidden></div>
+        <button type="submit" class="btn btn--gold btn--full" id="loyaltySubmitBtn">Consulter mes points</button>
+      </form>
+      <div id="loyaltyResult" class="loyalty-result" hidden></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT (page) -->
+<section class="view contact-page" id="view-contact" hidden>
+  <div class="container">
+    <p class="section__eyebrow">Contact</p>
+    <h2 class="section__title">Restons en contact</h2>
+    <div class="contact-grid" id="contactGrid"></div>
+  </div>
+</section>
+
 <!-- FOOTER -->
-<footer class="footer" id="contact">
+<footer class="footer" id="site-footer">
   <div class="container footer__inner">
     <div class="footer__brand">
       <a href="#accueil" class="logo logo--footer">XXI<span>VEINTUNO</span> HOUSE</a>
@@ -117,47 +158,23 @@
       <a href="#accueil">Accueil</a>
       <a href="#collections">Collections</a>
       <a href="#maison">La Maison</a>
-      <a href="#packs">Packs</a>
+      <a href="#compose">Composer mon pack</a>
     </div>
     <div class="footer__col">
       <h4>Informations</h4>
-      <a href="#">Livraison &amp; retours</a>
-      <a href="#">Conditions générales</a>
-      <a href="#">Politique de confidentialité</a>
+      <a href="#loyalty">Programme de fidélité</a>
+      <a href="#contact">Contact</a>
     </div>
     <div class="footer__col">
       <h4>Nous suivre</h4>
-      <a href="#">Instagram</a>
-      <a href="#">WhatsApp</a>
+      <a href="#" id="footerInstagram" target="_blank" rel="noopener" hidden>Instagram</a>
+      <a href="#" id="footerWhatsapp" target="_blank" rel="noopener" hidden>WhatsApp</a>
     </div>
   </div>
   <div class="footer__bottom container">
     <p>© 2026 VEINTUNO HOUSE. Tous droits réservés.</p>
   </div>
 </footer>
-
-<!-- PACK CHOOSER (entry point for "Composer mon pack") -->
-<div class="pack-modal" id="packChooserModal" aria-hidden="true">
-  <div class="pack-modal__backdrop" id="packChooserBackdrop"></div>
-  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="packChooserTitle">
-    <div class="pack-modal__header">
-      <div>
-        <p class="section__eyebrow" id="packChooserEyebrow">Composer mon pack</p>
-        <h2 id="packChooserTitle">Choisissez votre formule</h2>
-      </div>
-      <button type="button" class="pack-modal__close" id="packChooserClose" aria-label="Fermer">
-        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-      </button>
-    </div>
-    <div class="pack-modal__body">
-      <div class="chooser-step" id="chooserStepFormula"></div>
-      <div class="chooser-step" id="chooserStepType" hidden>
-        <button type="button" class="collection-detail__back" id="chooserBackToFormula">← Changer de formule</button>
-        <div class="chooser-grid" id="chooserTypeGrid"></div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- QUICK VIEW -->
 <div class="pack-modal" id="quickViewModal" aria-hidden="true">
@@ -172,100 +189,6 @@
     <div class="pack-modal__body">
       <div class="product-detail__layout product-detail__layout--compact" id="quickViewBody"></div>
     </div>
-  </div>
-</div>
-
-<!-- COMPOSER DE PACK -->
-<div class="pack-modal" id="packModal" aria-hidden="true">
-  <div class="pack-modal__backdrop" id="packModalBackdrop"></div>
-  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="packModalTitle">
-
-    <div class="pack-modal__header">
-      <div>
-        <p class="section__eyebrow" id="packModalEyebrow">Composez votre pack</p>
-        <h2 id="packModalTitle">Pack Signature</h2>
-      </div>
-      <button type="button" class="pack-modal__close" id="packModalClose" aria-label="Fermer">
-        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-      </button>
-    </div>
-
-    <div class="pack-modal__progress">
-      <div class="pack-modal__progress-text">
-        <span id="packModalCount">0</span> parfum(s) sur <span id="packModalTotal">4</span> sélectionné(s)
-      </div>
-      <div class="pack-modal__progress-bar">
-        <div class="pack-modal__progress-fill" id="packModalFill"></div>
-      </div>
-    </div>
-
-    <div class="pack-modal__body" id="packModalBody">
-      <div class="pack-modal__grid" id="packModalGrid"></div>
-
-      <div class="pack-modal__success" id="packModalSuccess" hidden>
-        <div class="pack-modal__success-icon">
-          <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <h3>Pack ajouté au panier</h3>
-        <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
-        <ul class="pack-modal__success-list" id="packModalSuccessList"></ul>
-        <button type="button" class="btn btn--outline" id="packModalViewCart">Voir mon panier</button>
-      </div>
-    </div>
-
-    <div class="pack-modal__footer">
-      <div class="pack-modal__recap" id="packModalRecap">
-        <span class="pack-modal__recap-empty">Aucun parfum sélectionné</span>
-      </div>
-      <button type="button" class="btn btn--gold" id="packModalCta" disabled>Ajouter au panier</button>
-    </div>
-
-  </div>
-</div>
-
-<!-- FREE PACK BUILDER -->
-<div class="pack-modal" id="freePackModal" aria-hidden="true">
-  <div class="pack-modal__backdrop" id="freePackModalBackdrop"></div>
-  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="freePackModalTitle">
-
-    <div class="pack-modal__header">
-      <div>
-        <p class="section__eyebrow" id="freePackModalEyebrow">Choisissez vos produits</p>
-        <h2 id="freePackModalTitle">FREE PACK</h2>
-      </div>
-      <button type="button" class="pack-modal__close" id="freePackModalClose" aria-label="Fermer">
-        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-      </button>
-    </div>
-
-    <div class="pack-modal__progress">
-      <div class="pack-modal__progress-text" id="freePackModalProgressText">0/3</div>
-      <div class="pack-modal__progress-bar">
-        <div class="pack-modal__progress-fill" id="freePackModalFill"></div>
-      </div>
-    </div>
-
-    <div class="pack-modal__body" id="freePackModalBody">
-      <div class="pack-modal__grid" id="freePackModalGrid"></div>
-
-      <div class="pack-modal__success" id="freePackModalSuccess" hidden>
-        <div class="pack-modal__success-icon">
-          <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <h3>Free Pack ajouté au panier</h3>
-        <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
-        <ul class="pack-modal__success-list" id="freePackModalSuccessList"></ul>
-        <button type="button" class="btn btn--outline" id="freePackModalViewCart">Voir mon panier</button>
-      </div>
-    </div>
-
-    <div class="pack-modal__footer">
-      <div class="pack-modal__recap" id="freePackModalRecap">
-        <span class="pack-modal__recap-empty">Aucun produit sélectionné</span>
-      </div>
-      <button type="button" class="btn btn--gold" id="freePackModalCta" disabled>Ajouter au panier</button>
-    </div>
-
   </div>
 </div>
 
@@ -336,8 +259,30 @@
           <span>Total à payer à la livraison</span>
           <span id="checkoutSubtotal">0 MAD</span>
         </div>
-        <button type="submit" class="btn btn--gold btn--full" id="checkoutSubmitBtn">Confirmer la commande</button>
+        <button type="submit" class="btn btn--gold btn--full" id="checkoutReviewBtn">Vérifier ma commande</button>
       </form>
+    </div>
+
+    <!-- Step: Review (final explicit confirmation, prevents accidental double-order) -->
+    <div class="cart-step" id="cartStepReview" hidden>
+      <div class="cart-drawer__header">
+        <button type="button" class="cart-drawer__back" id="cartBackToCheckout" aria-label="Retour">←</button>
+        <h2>Confirmer la commande</h2>
+        <button type="button" class="pack-modal__close" id="cartCloseFromReview" aria-label="Fermer">
+          <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+      </div>
+      <div class="cart-drawer__items" id="reviewItems"></div>
+      <div class="cart-drawer__footer">
+        <div id="reviewCustomer" class="review-customer"></div>
+        <div id="reviewError" class="checkout-form__error" hidden></div>
+        <div class="cart-drawer__subtotal">
+          <span>Total à payer à la livraison</span>
+          <span id="reviewTotal">0 MAD</span>
+        </div>
+        <button type="button" class="btn btn--gold btn--full" id="reviewFinalizeBtn">Finaliser la commande</button>
+        <button type="button" class="btn btn--outline btn--full" id="reviewBackBtn" style="margin-top:10px;">Retour</button>
+      </div>
     </div>
 
     <!-- Step: Confirmation -->

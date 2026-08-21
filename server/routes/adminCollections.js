@@ -43,12 +43,12 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, description, image } = req.body;
+  const { name, description, image, showInNav } = req.body;
   if (!name) return res.status(400).json({ error: 'Nom requis.' });
   const slug = await uniqueSlug(name);
   const count = await prisma.collection.count();
   const collection = await prisma.collection.create({
-    data: { slug, name, description: description || null, image: image || null, position: count },
+    data: { slug, name, description: description || null, image: image || null, position: count, showInNav: showInNav !== false },
   });
   res.status(201).json(collection);
 });
@@ -58,6 +58,7 @@ router.put('/:id', async (req, res) => {
   const data = {};
   ['name', 'description', 'image'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
+  if (body.showInNav !== undefined) data.showInNav = !!body.showInNav;
   if (body.position !== undefined) data.position = Number(body.position);
   if (body.regenerateSlug && body.name) data.slug = await uniqueSlug(body.name, req.params.id);
 

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Réglages — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Réglages du site</h1>
+        <p>WhatsApp, Instagram et textes affichés sur la page Contact et les fiches parfums.</p>
+      </div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;max-width:640px;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;">Contact</h2>
+      <form class="admin-form" id="settingsForm">
+        <div class="admin-field">
+          <label>Numéro ou lien WhatsApp</label>
+          <input name="whatsappNumber" placeholder="ex. +212600000000 ou https://wa.me/212600000000">
+          <p class="admin-field-help">Un numéro seul est automatiquement transformé en lien de discussion WhatsApp.</p>
+        </div>
+        <div class="admin-field">
+          <label>Lien Instagram</label>
+          <input name="instagramLink" placeholder="https://instagram.com/votre_marque">
+        </div>
+        <div class="admin-field">
+          <label>QR Code Instagram</label>
+          <div id="qrPreview" style="margin-bottom:8px;"></div>
+          <input type="file" id="qrUpload" accept="image/*">
+          <input type="hidden" name="instagramQrImage">
+        </div>
+        <div class="admin-field">
+          <label>Mention affichée sur les fiches parfums</label>
+          <textarea name="perfumeDisclaimer" placeholder="Inspiré des plus grands parfums — non affilié aux marques citées."></textarea>
+        </div>
+        <div class="admin-modal__actions" style="justify-content:flex-start;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+async function load() {
+  const settings = await adminApi('/settings');
+  const form = document.getElementById('settingsForm');
+  form.whatsappNumber.value = settings.whatsappNumber || '';
+  form.instagramLink.value = settings.instagramLink || '';
+  form.perfumeDisclaimer.value = settings.perfumeDisclaimer || '';
+  form.instagramQrImage.value = settings.instagramQrImage || '';
+  if (settings.instagramQrImage) {
+    document.getElementById('qrPreview').innerHTML = `<img src="${settings.instagramQrImage}" style="width:120px;height:120px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
+  }
+}
+
+document.getElementById('qrUpload').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const result = await adminApi('/upload', { method: 'POST', body: fd });
+    document.querySelector('[name="instagramQrImage"]').value = result.url;
+    document.getElementById('qrPreview').innerHTML = `<img src="${result.url}" style="width:120px;height:120px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
+    toast('QR Code importé.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const payload = {
+    whatsappNumber: fd.get('whatsappNumber'),
+    instagramLink: fd.get('instagramLink'),
+    instagramQrImage: fd.get('instagramQrImage'),
+    perfumeDisclaimer: fd.get('perfumeDisclaimer'),
+  };
+  try {
+    await adminApi('/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    toast('Réglages enregistrés.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+(async () => {
+  const admin = await initAdminPage('settings.html');
+  if (!admin) return;
+  await load();
+})();
+</script>
+</body>
+</html>

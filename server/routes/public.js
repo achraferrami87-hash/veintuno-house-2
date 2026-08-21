@@ -11,10 +11,19 @@ function parseImages(product) {
   return { ...product, images };
 }
 
+// ---------- Site settings (WhatsApp / Instagram / perfume disclaimer) ----------
+router.get('/settings', async (req, res) => {
+  let settings = await prisma.siteSettings.findFirst();
+  if (!settings) settings = await prisma.siteSettings.create({ data: {} });
+  res.json(settings);
+});
+
 // ---------- Collections ----------
 router.get('/collections', async (req, res) => {
+  const where = { isActive: true };
+  if (req.query.nav === 'true') where.showInNav = true;
   const collections = await prisma.collection.findMany({
-    where: { isActive: true },
+    where,
     orderBy: { position: 'asc' },
   });
   res.json(collections);
@@ -248,13 +257,27 @@ router.post('/promo/validate', async (req, res) => {
 
 // ---------- Checkout ----------
 router.post('/orders', async (req, res) => {
-  const { customer, items, promoCode: promoCodeStr, deliveryFee } = req.body;
+  const { customer, items, promoCode: promoCodeStr, deliveryFee, clientOrderId } = req.body;
 
   if (!customer || !customer.fullName || !customer.address || !customer.city || !customer.phone) {
     return res.status(400).json({ error: 'Informations client incomplètes.' });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Le panier est vide.' });
+  }
+
+  // Idempotency: a retried/double-submitted checkout with the same client-generated
+  // id must never create a second order — replay the original result instead.
+  if (clientOrderId) {
+    const existing = await prisma.order.findUnique({ where: { clientOrderId } });
+    if (existing) {
+      return res.json({
+        orderNumber: existing.orderNumber,
+        subtotal: existing.subtotal,
+        discountAmount: existing.discountAmount,
+        total: existing.total,
+      });
+    }
   }
 
   const resolved = await resolveItemsPricing(items);
@@ -307,6 +330,7 @@ router.post('/orders', async (req, res) => {
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
+          clientOrderId: clientOrderId || null,
           fullName: customer.fullName,
           phone: customer.phone,
           address: customer.address,
@@ -367,6 +391,21 @@ router.post('/orders', async (req, res) => {
 
     res.json({ orderNumber: order.orderNumber, subtotal, discountAmount, total });
   } catch (err) {
+    // Race-condition safety net: two near-simultaneous double-submits both
+    // pass the earlier findUnique check, but only one create() wins — the
+    // loser hits the unique constraint. Replay the winner's result instead
+    // of erroring, so the client still sees a successful confirmation.
+    if (err.code === 'P2002' && clientOrderId) {
+      const existing = await prisma.order.findUnique({ where: { clientOrderId } });
+      if (existing) {
+        return res.json({
+          orderNumber: existing.orderNumber,
+          subtotal: existing.subtotal,
+          discountAmount: existing.discountAmount,
+          total: existing.total,
+        });
+      }
+    }
     res.status(400).json({ error: err.message || 'Impossible de finaliser la commande.' });
   }
 });

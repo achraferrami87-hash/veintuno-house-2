@@ -58,6 +58,7 @@ router.post('/', async (req, res) => {
       notesHeart: body.notesHeart || null,
       notesBase: body.notesBase || null,
       gender: body.gender || null,
+      volume: body.volume || null,
       price: Number(body.price),
       stock: Number(body.stock) || 0,
       lowStockThreshold: Number(body.lowStockThreshold) || 5,
@@ -84,6 +85,7 @@ router.put('/:id', async (req, res) => {
   const fields = ['name', 'description', 'notes', 'notesTop', 'notesHeart', 'notesBase', 'videoUrl', 'shape', 'color', 'collectionId'];
   fields.forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
   if (body.gender !== undefined) data.gender = body.gender || null;
+  if (body.volume !== undefined) data.volume = body.volume || null;
   const numFields = ['price', 'stock', 'lowStockThreshold', 'position'];
   numFields.forEach((f) => { if (body[f] !== undefined) data[f] = Number(body[f]); });
   const boolFields = ['isActive', 'isNew', 'isBestSeller', 'isLimitedEdition', 'packEligible', 'freePackEligible'];

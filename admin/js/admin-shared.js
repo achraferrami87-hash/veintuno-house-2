@@ -88,6 +88,7 @@ const NAV_ITEMS = [
   { href: 'homepage-editor.html', label: 'Homepage', icon: 'M3 3h18v18H3V3Zm0 6h18M9 21V9' },
   { href: 'navbar.html', label: 'Navbar', icon: 'M4 6h16M4 12h16M4 18h16' },
   { href: 'loyalty.html', label: 'Fidélité', icon: 'M12 2 15 8.5 22 9.3 17 14 18.3 21 12 17.5 5.7 21 7 14 2 9.3 9 8.5 12 2Z' },
+  { href: 'settings.html', label: 'Réglages', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 2h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6a7.4 7.4 0 0 0 .1-1.2Z' },
 ];
 
 function renderAdminLayout(activeHref, admin) {

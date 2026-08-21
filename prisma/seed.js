@@ -12,39 +12,39 @@ const COLLECTIONS = [
 
 const PRODUCTS = [
   // Parfums
-  { slug: 'atlas-noir', name: 'Atlas Noir', collection: 'parfums', notes: 'Boisé / Ambré', gender: 'homme', notesTop: 'Bergamote, Poivre noir', notesHeart: 'Cuir, Encens', notesBase: 'Ambre, Bois de oud', price: 89, isBestSeller: true, shape: 'bottle', color: '#0c0c0c', freePackEligible: true },
-  { slug: 'minuit-cuir', name: 'Minuit Cuir', collection: 'parfums', notes: 'Cuir / Épicé', gender: 'homme', notesTop: 'Cardamome, Safran', notesHeart: 'Cuir, Rose', notesBase: 'Patchouli, Vanille', price: 89, isLimitedEdition: true, shape: 'bottle', color: '#C9A227', freePackEligible: true },
-  { slug: 'cedre-royal', name: 'Cèdre Royal', collection: 'parfums', notes: 'Boisé / Frais', gender: 'homme', notesTop: 'Bergamote, Menthe', notesHeart: 'Cèdre, Lavande', notesBase: 'Vétiver, Mousse de chêne', price: 89, shape: 'bottle', color: '#5a5650', freePackEligible: true },
-  { slug: 'oud-imperial', name: 'Oud Impérial', collection: 'parfums', notes: 'Oud / Boisé', gender: 'unisexe', notesTop: 'Safran, Cannelle', notesHeart: 'Oud, Rose de Damas', notesBase: 'Bois de santal, Ambre gris', price: 95, isNew: true, shape: 'bottle', color: '#6b5a1c', freePackEligible: true },
-  { slug: 'rose-lumiere', name: 'Rose Lumière', collection: 'parfums', notes: 'Floral / Musqué', gender: 'femme', notesTop: 'Poire, Bergamote', notesHeart: 'Rose, Pivoine', notesBase: 'Musc blanc, Bois de cachemire', price: 89, isBestSeller: true, shape: 'bottle', color: '#e6c15c', freePackEligible: true },
-  { slug: 'iris-soie', name: 'Iris Soie', collection: 'parfums', notes: 'Floral / Poudré', gender: 'femme', notesTop: 'Mandarine, Rose', notesHeart: 'Iris, Violette', notesBase: 'Musc, Fève tonka', price: 89, shape: 'bottle', color: '#d8cfc0', freePackEligible: true },
-  { slug: 'vanille-ambree', name: 'Vanille Ambrée', collection: 'parfums', notes: 'Vanille / Gourmand', gender: 'femme', notesTop: 'Mandarine, Cannelle', notesHeart: 'Vanille, Jasmin', notesBase: 'Ambre, Fève tonka', price: 89, shape: 'bottle', color: '#b9822f', freePackEligible: true },
-  { slug: 'fleur-blanche', name: 'Fleur Blanche', collection: 'parfums', notes: 'Floral / Fruité', gender: 'femme', notesTop: 'Poire, Freesia', notesHeart: 'Fleur d\'oranger, Jasmin', notesBase: 'Musc blanc, Bois clair', price: 89, shape: 'bottle', color: '#efe6d3', freePackEligible: true },
+  { slug: 'atlas-noir', name: 'Atlas Noir', collection: 'parfums', notes: 'Boisé / Ambré', gender: 'homme', volume: '50ML', notesTop: 'Bergamote, Poivre noir', notesHeart: 'Cuir, Encens', notesBase: 'Ambre, Bois de oud', price: 89, isBestSeller: true, shape: 'bottle', color: '#0c0c0c', freePackEligible: true },
+  { slug: 'minuit-cuir', name: 'Minuit Cuir', collection: 'parfums', notes: 'Cuir / Épicé', gender: 'homme', volume: '50ML', notesTop: 'Cardamome, Safran', notesHeart: 'Cuir, Rose', notesBase: 'Patchouli, Vanille', price: 89, isLimitedEdition: true, shape: 'bottle', color: '#C9A227', freePackEligible: true },
+  { slug: 'cedre-royal', name: 'Cèdre Royal', collection: 'parfums', notes: 'Boisé / Frais', gender: 'homme', volume: '50ML', notesTop: 'Bergamote, Menthe', notesHeart: 'Cèdre, Lavande', notesBase: 'Vétiver, Mousse de chêne', price: 89, shape: 'bottle', color: '#5a5650', freePackEligible: true },
+  { slug: 'oud-imperial', name: 'Oud Impérial', collection: 'parfums', notes: 'Oud / Boisé', gender: 'unisexe', volume: '50ML', notesTop: 'Safran, Cannelle', notesHeart: 'Oud, Rose de Damas', notesBase: 'Bois de santal, Ambre gris', price: 95, isNew: true, shape: 'bottle', color: '#6b5a1c', freePackEligible: true },
+  { slug: 'rose-lumiere', name: 'Rose Lumière', collection: 'parfums', notes: 'Floral / Musqué', gender: 'femme', volume: '50ML', notesTop: 'Poire, Bergamote', notesHeart: 'Rose, Pivoine', notesBase: 'Musc blanc, Bois de cachemire', price: 89, isBestSeller: true, shape: 'bottle', color: '#e6c15c', freePackEligible: true },
+  { slug: 'iris-soie', name: 'Iris Soie', collection: 'parfums', notes: 'Floral / Poudré', gender: 'femme', volume: '50ML', notesTop: 'Mandarine, Rose', notesHeart: 'Iris, Violette', notesBase: 'Musc, Fève tonka', price: 89, shape: 'bottle', color: '#d8cfc0', freePackEligible: true },
+  { slug: 'vanille-ambree', name: 'Vanille Ambrée', collection: 'parfums', notes: 'Vanille / Gourmand', gender: 'femme', volume: '50ML', notesTop: 'Mandarine, Cannelle', notesHeart: 'Vanille, Jasmin', notesBase: 'Ambre, Fève tonka', price: 89, shape: 'bottle', color: '#b9822f', freePackEligible: true },
+  { slug: 'fleur-blanche', name: 'Fleur Blanche', collection: 'parfums', notes: 'Floral / Fruité', gender: 'femme', volume: '50ML', notesTop: 'Poire, Freesia', notesHeart: 'Fleur d\'oranger, Jasmin', notesBase: 'Musc blanc, Bois clair', price: 89, shape: 'bottle', color: '#efe6d3', freePackEligible: true },
 
   // Gels Douche — 200ml, individual price 85 DH
-  { slug: 'gel-oud-noir', name: 'Gel Douche Oud Noir', collection: 'gels-douche', notes: 'Oud / Boisé — 200ml', price: 85, shape: 'tube', color: '#2b2118', freePackEligible: true },
-  { slug: 'gel-musc-blanc', name: 'Gel Douche Musc Blanc', collection: 'gels-douche', notes: 'Musc / Propre — 200ml', price: 85, isBestSeller: true, shape: 'tube', color: '#e9e4d8', freePackEligible: true },
-  { slug: 'gel-ambre-dore', name: 'Gel Douche Ambre Doré', collection: 'gels-douche', notes: 'Ambre / Épicé — 200ml', price: 85, shape: 'tube', color: '#b9822f', freePackEligible: true },
-  { slug: 'gel-fleur-coton', name: 'Gel Douche Fleur de Coton', collection: 'gels-douche', notes: 'Floral / Doux — 200ml', price: 85, shape: 'tube', color: '#ead9e0', freePackEligible: true },
+  { slug: 'gel-oud-noir', name: 'Gel Douche Oud Noir', collection: 'gels-douche', notes: 'Oud / Boisé — 200ml', volume: null, price: 85, shape: 'tube', color: '#2b2118', freePackEligible: true },
+  { slug: 'gel-musc-blanc', name: 'Gel Douche Musc Blanc', collection: 'gels-douche', notes: 'Musc / Propre — 200ml', volume: null, price: 85, isBestSeller: true, shape: 'tube', color: '#e9e4d8', freePackEligible: true },
+  { slug: 'gel-ambre-dore', name: 'Gel Douche Ambre Doré', collection: 'gels-douche', notes: 'Ambre / Épicé — 200ml', volume: null, price: 85, shape: 'tube', color: '#b9822f', freePackEligible: true },
+  { slug: 'gel-fleur-coton', name: 'Gel Douche Fleur de Coton', collection: 'gels-douche', notes: 'Floral / Doux — 200ml', volume: null, price: 85, shape: 'tube', color: '#ead9e0', freePackEligible: true },
 
   // Supplements — individual only (no packs), per spec
-  { slug: 'sup-collagene', name: 'Complexe Beauté Collagène', collection: 'supplements', notes: 'Peau & cheveux — 60 gélules', price: 149, isBestSeller: true, shape: 'jar', color: '#efe6d3' },
-  { slug: 'sup-vitamine-c', name: 'Vitamine Éclat C+E', collection: 'supplements', notes: 'Antioxydant — 60 gélules', price: 129, shape: 'jar', color: '#e6c15c' },
-  { slug: 'sup-biotine', name: 'Biotine Cheveux & Ongles', collection: 'supplements', notes: 'Croissance — 60 gélules', price: 139, shape: 'jar', color: '#0c0c0c' },
-  { slug: 'sup-omega-glow', name: 'Oméga Glow', collection: 'supplements', notes: 'Peau nourrie — 60 capsules', price: 159, shape: 'jar', color: '#b9822f' },
+  { slug: 'sup-collagene', name: 'Complexe Beauté Collagène', collection: 'supplements', notes: 'Peau & cheveux — 60 gélules', volume: null, price: 149, isBestSeller: true, shape: 'jar', color: '#efe6d3' },
+  { slug: 'sup-vitamine-c', name: 'Vitamine Éclat C+E', collection: 'supplements', notes: 'Antioxydant — 60 gélules', volume: null, price: 129, shape: 'jar', color: '#e6c15c' },
+  { slug: 'sup-biotine', name: 'Biotine Cheveux & Ongles', collection: 'supplements', notes: 'Croissance — 60 gélules', volume: null, price: 139, shape: 'jar', color: '#0c0c0c' },
+  { slug: 'sup-omega-glow', name: 'Oméga Glow', collection: 'supplements', notes: 'Peau nourrie — 60 capsules', volume: null, price: 159, shape: 'jar', color: '#b9822f' },
 
   // Cosmetics — individual only (no packs), per spec
-  { slug: 'cos-baume-levres', name: 'Baume à Lèvres Satin', collection: 'cosmetics', notes: 'Soin lèvres — 8g', price: 39, shape: 'tube', color: '#d8cfc0' },
-  { slug: 'cos-huile-seche', name: 'Huile Sèche Corps & Cheveux', collection: 'cosmetics', notes: 'Finition satinée — 100ml', price: 99, isBestSeller: true, shape: 'bottle', color: '#C9A227' },
-  { slug: 'cos-creme-mains', name: 'Crème Mains Nourrissante', collection: 'cosmetics', notes: 'Hydratation — 50ml', price: 45, shape: 'jar', color: '#efe6d3' },
-  { slug: 'cos-brume-corps', name: 'Brume Corps Signature', collection: 'cosmetics', notes: 'Sillage léger — 100ml', price: 79, shape: 'bottle', color: '#e6c15c' },
+  { slug: 'cos-baume-levres', name: 'Baume à Lèvres Satin', collection: 'cosmetics', notes: 'Soin lèvres — 8g', volume: null, price: 39, shape: 'tube', color: '#d8cfc0' },
+  { slug: 'cos-huile-seche', name: 'Huile Sèche Corps & Cheveux', collection: 'cosmetics', notes: 'Finition satinée — 100ml', volume: null, price: 99, isBestSeller: true, shape: 'bottle', color: '#C9A227' },
+  { slug: 'cos-creme-mains', name: 'Crème Mains Nourrissante', collection: 'cosmetics', notes: 'Hydratation — 50ml', volume: null, price: 45, shape: 'jar', color: '#efe6d3' },
+  { slug: 'cos-brume-corps', name: 'Brume Corps Signature', collection: 'cosmetics', notes: 'Sillage léger — 100ml', volume: null, price: 79, shape: 'bottle', color: '#e6c15c' },
 ];
 
 const SLIDES = [
   {
     eyebrow: 'Veintuno House', title: 'MADE TO<br><em>LAST.</em>',
     subtitle: '« Un parfum ne complète pas une tenue. Il révèle une mémoire. »',
-    ctaText1: 'Composer mon pack', ctaHref1: '#pack-chooser',
+    ctaText1: 'Composer mon pack', ctaHref1: '#compose',
     ctaText2: 'Découvrir la collection', ctaHref2: '#collections',
     gradientFallback: 'radial-gradient(ellipse at 75% 50%, rgba(201,162,39,0.22), transparent 60%), linear-gradient(180deg, #0c0c0c 0%, #161513 100%)',
     position: 0,
@@ -66,7 +66,7 @@ const SLIDES = [
   {
     eyebrow: 'Offre', title: 'LIVRAISON <em>OFFERTE</em>',
     subtitle: "Partout au Maroc, sans minimum d'achat, paiement à la livraison.",
-    ctaText1: 'Composer mon pack', ctaHref1: '#pack-chooser',
+    ctaText1: 'Composer mon pack', ctaHref1: '#compose',
     gradientFallback: 'radial-gradient(ellipse at 50% 30%, rgba(201,162,39,0.2), transparent 60%), linear-gradient(180deg, #161513 0%, #0c0c0c 100%)',
     position: 3,
   },
@@ -168,18 +168,11 @@ async function main() {
     await prisma.homepageSection.createMany({
       data: [
         {
-          type: 'PACKS',
-          title: 'Formules',
-          subtitle: 'Composez votre pack',
-          config: JSON.stringify({ collectionSlug: 'parfums' }),
-          position: 0,
-        },
-        {
           type: 'FEATURED_COLLECTIONS',
           title: 'La Maison',
           subtitle: 'Nos collections',
           config: JSON.stringify({ collectionSlugs: ['parfums', 'gels-douche', 'supplements', 'cosmetics'] }),
-          position: 1,
+          position: 0,
         },
         {
           type: 'TEXT_IMAGE',
@@ -188,7 +181,7 @@ async function main() {
           config: JSON.stringify({
             body: "VEINTUNO HOUSE est née d'une conviction simple : le parfum est le dernier détail que l'on oublie de soigner, et pourtant le premier que l'on retient d'une personne. Chaque composition est pensée au Maroc, inspirée des grandes maisons, pour offrir une intensité et une tenue rares à ce niveau d'accessibilité.",
           }),
-          position: 2,
+          position: 1,
         },
         {
           type: 'TESTIMONIALS',
@@ -201,7 +194,7 @@ async function main() {
               { rating: 5, quote: 'Rose Lumière est devenu mon parfum du quotidien. Discret mais on le remarque toujours.', author: 'Imane, Marrakech' },
             ],
           }),
-          position: 3,
+          position: 2,
         },
       ],
     });
@@ -214,9 +207,16 @@ async function main() {
     await prisma.navMenuItem.createMany({
       data: [
         { label: 'Parfums', href: '#collection/parfums', position: 0 },
-        { label: 'Contact', href: '#contact', position: 1 },
+        { label: 'Fidélité', href: '#loyalty', position: 1 },
+        { label: 'Contact', href: '#contact', position: 2 },
       ],
     });
+  }
+
+  // Site settings (WhatsApp / Instagram) — left blank for the admin to fill in
+  const siteSettingsCount = await prisma.siteSettings.count();
+  if (siteSettingsCount === 0) {
+    await prisma.siteSettings.create({ data: {} });
   }
 
   // Loyalty settings

@@ -22,7 +22,7 @@
 
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th></th><th></th><th>Nom</th><th>Slug</th><th>Produits</th><th>Packs</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th></th><th></th><th>Nom</th><th>Slug</th><th>Produits</th><th>Packs</th><th>Statut</th><th>Navbar</th><th></th></tr></thead>
         <tbody id="collectionsBody"></tbody>
       </table>
     </div>
@@ -43,9 +43,11 @@ function rowHTML(c) {
       <td>${c._count ? c._count.products : 0}</td>
       <td>${c._count ? c._count.packs : 0}</td>
       <td>${c.isActive ? '<span class="badge badge--green">Visible</span>' : '<span class="badge badge--gray">Masquée</span>'}</td>
+      <td>${c.showInNav ? '<span class="badge badge--gold">Dans le menu</span>' : '<span class="badge badge--gray">Masquée du menu</span>'}</td>
       <td class="row-actions">
         <button data-action="edit">Modifier</button>
         <button data-action="toggle">${c.isActive ? 'Masquer' : 'Afficher'}</button>
+        <button data-action="toggle-nav">${c.showInNav ? 'Retirer du menu' : 'Ajouter au menu'}</button>
         <button data-action="delete" class="is-danger">Supprimer</button>
       </td>
     </tr>`;
@@ -66,6 +68,11 @@ document.getElementById('collectionsBody').addEventListener('click', async (e) =
   if (btn.dataset.action === 'toggle') {
     await adminApi(`/collections/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !collection.isActive }) });
     toast('Statut mis à jour.'); await loadAll();
+  }
+  if (btn.dataset.action === 'toggle-nav') {
+    await adminApi(`/collections/${id}`, { method: 'PUT', body: JSON.stringify({ showInNav: !collection.showInNav }) });
+    toast(collection.showInNav ? 'Retirée du menu (toujours visible sur le site).' : 'Ajoutée au menu.');
+    await loadAll();
   }
   if (btn.dataset.action === 'delete') {
     const ok = await confirmDialog(`Supprimer la collection "${collection.name}" ?`);
@@ -94,6 +101,8 @@ function openModal(collection) {
           <input type="hidden" name="image" value="${isEdit ? (collection.image || '') : ''}">
         </div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || collection.isActive ? 'checked' : ''}> Visible sur le site</label>
+        <label class="admin-checkbox"><input type="checkbox" name="showInNav" ${!isEdit || collection.showInNav ? 'checked' : ''}> Afficher dans le menu de navigation</label>
+        <p class="admin-field-help">Retirer une collection du menu ne la supprime jamais du site — elle reste accessible via la page Collections.</p>
         <div class="admin-modal__actions">
           <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
           <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
@@ -118,7 +127,7 @@ function openModal(collection) {
   document.getElementById('collectionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on' };
+    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on' };
     try {
       if (isEdit) await adminApi(`/collections/${collection.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await adminApi('/collections', { method: 'POST', body: JSON.stringify(payload) });

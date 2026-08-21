@@ -150,6 +150,9 @@ function openProductModal(product) {
         </div>
         <div class="admin-form__row">
           <div class="admin-field"><label>Notes / courte description (carte produit)</label><input name="notes" value="${isEdit ? (product.notes || '') : ''}" placeholder="ex. Boisé / Ambré"></div>
+          <div class="admin-field"><label>Contenance</label><input name="volume" value="${isEdit ? (product.volume || '') : ''}" placeholder="ex. 50ML"></div>
+        </div>
+        <div class="admin-form__row">
           <div class="admin-field"><label>Genre (parfums)</label>
             <select name="gender">
               <option value="" ${isEdit && !product.gender ? 'selected' : ''}>—</option>
@@ -239,7 +242,7 @@ function openProductModal(product) {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
       price: fd.get('price'), stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
-      gender: fd.get('gender'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      gender: fd.get('gender'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
       images,
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',

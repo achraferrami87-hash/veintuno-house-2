@@ -121,6 +121,7 @@ const Cart = (() => {
 
   const stepBag = document.getElementById('cartStepBag');
   const stepCheckout = document.getElementById('cartStepCheckout');
+  const stepReview = document.getElementById('cartStepReview');
   const stepSuccess = document.getElementById('cartStepSuccess');
 
   const itemsEl = document.getElementById('cartItems');
@@ -132,7 +133,14 @@ const Cart = (() => {
   const checkoutSubtotalEl = document.getElementById('checkoutSubtotal');
   const checkoutForm = document.getElementById('checkoutForm');
   const checkoutErrorEl = document.getElementById('checkoutError');
-  const checkoutSubmitBtn = document.getElementById('checkoutSubmitBtn');
+
+  const reviewItemsEl = document.getElementById('reviewItems');
+  const reviewCustomerEl = document.getElementById('reviewCustomer');
+  const reviewTotalEl = document.getElementById('reviewTotal');
+  const reviewErrorEl = document.getElementById('reviewError');
+  const reviewFinalizeBtn = document.getElementById('reviewFinalizeBtn');
+  const reviewBackBtn = document.getElementById('reviewBackBtn');
+
   const successNameEl = document.getElementById('successCustomerName');
   const successOrderNumberEl = document.getElementById('successOrderNumber');
   const successListEl = document.getElementById('successOrderList');
@@ -145,6 +153,14 @@ const Cart = (() => {
 
   let items = load();
   let appliedPromo = null; // { code, discount }
+  let pendingCustomer = null;
+  let clientOrderId = null;
+  let isSubmittingOrder = false;
+
+  function newClientOrderId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 
   function load() {
     try {
@@ -277,6 +293,7 @@ const Cart = (() => {
   function showStep(step) {
     stepBag.hidden = step !== 'bag';
     stepCheckout.hidden = step !== 'checkout';
+    stepReview.hidden = step !== 'review';
     stepSuccess.hidden = step !== 'success';
   }
   function open(step) {
@@ -295,8 +312,11 @@ const Cart = (() => {
   if (backdrop) backdrop.addEventListener('click', close);
   document.getElementById('cartClose').addEventListener('click', close);
   document.getElementById('cartCloseFromCheckout').addEventListener('click', close);
+  document.getElementById('cartCloseFromReview').addEventListener('click', close);
   document.getElementById('cartCloseFromSuccess').addEventListener('click', close);
   document.getElementById('cartBackToBag').addEventListener('click', () => showStep('bag'));
+  document.getElementById('cartBackToCheckout').addEventListener('click', () => showStep('checkout'));
+  reviewBackBtn.addEventListener('click', () => showStep('checkout'));
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && drawer.classList.contains('cart-drawer--open')) close();
   });
@@ -331,32 +351,66 @@ const Cart = (() => {
     if (items.length === 0) return;
     if (checkoutSubtotalEl) checkoutSubtotalEl.textContent = `${total()} MAD`;
     checkoutErrorEl.hidden = true;
+    // A fresh checkout attempt gets a fresh idempotency key. Reused across
+    // checkout↔review back-and-forth so a double-submit of the SAME attempt
+    // is recognized server-side and never creates a second order.
+    clientOrderId = newClientOrderId();
     showStep('checkout');
   });
 
-  checkoutForm.addEventListener('submit', async (e) => {
+  checkoutForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!checkoutForm.reportValidity()) return;
 
     const formData = new FormData(checkoutForm);
-    const customer = {
+    pendingCustomer = {
       fullName: formData.get('fullName').toString().trim(),
       address: formData.get('address').toString().trim(),
       city: formData.get('city').toString().trim(),
       phone: formData.get('phone').toString().trim(),
     };
 
-    checkoutSubmitBtn.disabled = true;
-    checkoutSubmitBtn.textContent = 'Traitement...';
-    checkoutErrorEl.hidden = true;
+    reviewErrorEl.hidden = true;
+    reviewTotalEl.textContent = `${total()} MAD`;
+    reviewCustomerEl.innerHTML = `
+      <p><strong>${pendingCustomer.fullName}</strong></p>
+      <p>${pendingCustomer.address}, ${pendingCustomer.city}</p>
+      <p>${pendingCustomer.phone}</p>`;
+    reviewItemsEl.innerHTML = items.map((item) => `
+      <div class="cart-item">
+        <div class="cart-item__info">
+          <h4>${item.name}</h4>
+          <p>${item.detail}</p>
+          <div class="cart-item__meta"><span class="cart-item__price">${item.quantity > 1 ? `${item.quantity} × ${item.unitPrice} MAD` : `${item.unitPrice} MAD`}</span></div>
+        </div>
+      </div>`).join('');
+
+    showStep('review');
+  });
+
+  reviewFinalizeBtn.addEventListener('click', async () => {
+    // Belt-and-suspenders against double submission: a synchronous flag
+    // (immune to a second click landing before disabled= takes visual
+    // effect) plus the disabled attribute plus a server-side idempotency key.
+    if (isSubmittingOrder || !pendingCustomer) return;
+    isSubmittingOrder = true;
+    reviewFinalizeBtn.disabled = true;
+    reviewBackBtn.disabled = true;
+    reviewFinalizeBtn.textContent = 'Traitement...';
+    reviewErrorEl.hidden = true;
 
     try {
       const result = await api('/orders', {
         method: 'POST',
-        body: JSON.stringify({ customer, items: apiItems(), promoCode: appliedPromo ? appliedPromo.code : undefined }),
+        body: JSON.stringify({
+          customer: pendingCustomer,
+          items: apiItems(),
+          promoCode: appliedPromo ? appliedPromo.code : undefined,
+          clientOrderId,
+        }),
       });
 
-      successNameEl.textContent = customer.fullName;
+      successNameEl.textContent = pendingCustomer.fullName;
       successOrderNumberEl.textContent = result.orderNumber;
       successListEl.innerHTML = '';
       items.forEach((item) => {
@@ -371,15 +425,21 @@ const Cart = (() => {
       totalLi.textContent = `Total — ${result.total} MAD`;
       successListEl.appendChild(totalLi);
 
+      // Order is locked in server-side — now safe to wipe the local cart so
+      // a page refresh or repeat visit can never resubmit the same order.
       clear();
       checkoutForm.reset();
+      pendingCustomer = null;
+      clientOrderId = null;
       showStep('success');
     } catch (err) {
-      checkoutErrorEl.textContent = err.message;
-      checkoutErrorEl.hidden = false;
+      reviewErrorEl.textContent = err.message;
+      reviewErrorEl.hidden = false;
     } finally {
-      checkoutSubmitBtn.disabled = false;
-      checkoutSubmitBtn.textContent = 'Confirmer la commande';
+      isSubmittingOrder = false;
+      reviewFinalizeBtn.disabled = false;
+      reviewBackBtn.disabled = false;
+      reviewFinalizeBtn.textContent = 'Finaliser la commande';
     }
   });
 
@@ -487,40 +547,23 @@ function renderHeroSlider(slides) {
 // ===========================
 // HOMEPAGE SECTIONS (admin-managed, rendered in order)
 // ===========================
-function packsSectionHTML(section) {
-  const packs = (section.config.packs || []);
-  const featuredIndex = packs.length === 3 ? 1 : -1;
-  const cardsHTML = packs.map((pack, i) => `
-    <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
-      ${i === featuredIndex ? '<span class="pack-card__badge">Le plus choisi</span>' : ''}
-      <h3>${pack.name}</h3>
-      <p class="pack-card__count">${pack.size} produits</p>
-      <p class="pack-card__price">${pack.price} <span>MAD</span></p>
-      <ul>
-        <li>${pack.size} produits au choix</li>
-        <li>Livraison offerte</li>
-        <li>Paiement à la livraison</li>
-      </ul>
-      <button type="button" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full js-open-pack" data-pack-id="${pack.id}">Choisir</button>
-    </div>`).join('');
-
+// An admin-uploaded collection image always wins; only falls back to the
+// per-slug gradient (defined in CSS) when no image has been set.
+function collectionTileHTML(c) {
+  // The tinted ::before backdrop is a CSS custom property so an uploaded
+  // photo can replace the per-slug gradient without inline styles fighting
+  // the pseudo-element (which can't read a plain inline background-image).
+  const style = c.image ? ` style="--tile-image:url('${c.image}')"` : '';
   return `
-    <section class="packs" id="packs">
-      <div class="container">
-        <p class="section__eyebrow">${section.title || 'Formules'}</p>
-        <h2 class="section__title">${section.subtitle || 'Composez votre pack'}</h2>
-        <div class="packs__grid">${cardsHTML}</div>
-      </div>
-    </section>`;
+    <a href="#collection/${c.slug}" class="collection-tile collection-tile--${c.slug}${c.image ? ' has-image' : ''}"${style}>
+      <span class="collection-tile__label">${c.name}</span>
+      <span class="collection-tile__sub">${c.description || ''}</span>
+    </a>`;
 }
 
 function collectionsSectionHTML(section) {
   const collections = section.config.collections || [];
-  const tilesHTML = collections.map((c) => `
-    <a href="#collection/${c.slug}" class="collection-tile collection-tile--${c.slug}">
-      <span class="collection-tile__label">${c.name}</span>
-      <span class="collection-tile__sub">${c.description || ''}</span>
-    </a>`).join('');
+  const tilesHTML = collections.map(collectionTileHTML).join('');
   return `
     <section class="collections-page">
       <div class="container">
@@ -587,7 +630,6 @@ function promoBannerSectionHTML(section) {
 }
 
 const SECTION_RENDERERS = {
-  PACKS: packsSectionHTML,
   FEATURED_COLLECTIONS: collectionsSectionHTML,
   FEATURED_PRODUCTS: productsSectionHTML,
   BEST_SELLERS: productsSectionHTML,
@@ -610,7 +652,6 @@ async function initHomepage() {
     }
   } catch (e) { /* homepage will just show hero-less shell */ }
 
-  PackModal = initPackModal();
   initRevealAnimations();
 }
 
@@ -628,38 +669,219 @@ async function getFreePackConfig() {
   } catch (e) { return null; }
 }
 
-function openFreePackModal(config) {
-  const modal = document.getElementById('freePackModal');
-  const grid = document.getElementById('freePackModalGrid');
-  const title = document.getElementById('freePackModalTitle');
-  const progressText = document.getElementById('freePackModalProgressText');
-  const fillEl = document.getElementById('freePackModalFill');
-  const recap = document.getElementById('freePackModalRecap');
-  const cta = document.getElementById('freePackModalCta');
-  const successPane = document.getElementById('freePackModalSuccess');
-  const successList = document.getElementById('freePackModalSuccessList');
-  const body = document.getElementById('freePackModalBody');
-  const progressWrap = modal.querySelector('.pack-modal__progress');
+// ===========================
+// COMPOSE PACK — dedicated pages (no modals) for the whole
+// "Composer mon pack" journey: formula → type → product selection.
+// Rendered into #composeContainer by the router based on the hash.
+// ===========================
+function composeProgressHTML(count, total, unit) {
+  const pct = total ? Math.min(100, (count / total) * 100) : 0;
+  return `
+    <div class="pack-modal__progress compose-progress">
+      <div class="pack-modal__progress-text">
+        <span>${count}</span> ${unit} sur <span>${total}</span> sélectionné(s)
+      </div>
+      <div class="pack-modal__progress-bar"><div class="pack-modal__progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+}
 
-  title.textContent = config.name;
+async function renderComposeFormula(container) {
+  container.innerHTML = `
+    <a href="#accueil" class="collection-detail__back">← Retour à l'accueil</a>
+    <p class="section__eyebrow">Composer mon pack</p>
+    <h2 class="section__title">Choisissez votre formule</h2>
+    <div class="chooser-grid" id="composeFormulaGrid"><p class="admin-field-help">Chargement...</p></div>`;
 
-  grid.innerHTML = config.eligibleProducts.map((p) => `
-    <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.price}" data-collection="${p.collectionId}">
-      <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      <div class="product-card__bottle">${productMediaHTML(p)}</div>
-      <h3>${p.name}</h3>
-      <p class="product-card__notes">${p.notes || ''}</p>
-      <p class="product-card__price">${p.price} MAD</p>
-    </button>`).join('');
+  const grid = document.getElementById('composeFormulaGrid');
+  const [allPacks, freePackConfig] = await Promise.all([api('/packs'), getFreePackConfig()]);
+  cachePacks(allPacks);
 
+  const bySize = new Map();
+  allPacks.forEach((p) => {
+    if (!bySize.has(p.size)) bySize.set(p.size, []);
+    bySize.get(p.size).push(p);
+  });
+  const sizes = Array.from(bySize.keys()).sort((a, b) => a - b);
+
+  const cardsHTML = sizes.map((size) => {
+    const prices = bySize.get(size).map((p) => p.price);
+    const priceLabel = Math.min(...prices) === Math.max(...prices) ? `${prices[0]} MAD` : `dès ${Math.min(...prices)} MAD`;
+    return `
+      <a href="#compose/size/${size}" class="chooser-card">
+        <span class="chooser-card__title">Pack ${size}</span>
+        <span class="chooser-card__sub">${size} produits au choix</span>
+        <span class="chooser-card__price">${priceLabel}</span>
+      </a>`;
+  }).join('');
+
+  const freePackCardHTML = freePackConfig && freePackConfig.eligibleProducts && freePackConfig.eligibleProducts.length >= freePackConfig.minItems
+    ? `<a href="#compose/free" class="chooser-card chooser-card--gold">
+        <span class="chooser-card__title">${freePackConfig.name}</span>
+        <span class="chooser-card__sub">Composez 100% librement (min. ${freePackConfig.minItems} produits)</span>
+        <span class="chooser-card__price">Pack sur-mesure</span>
+      </a>`
+    : '';
+
+  grid.innerHTML = cardsHTML + freePackCardHTML || '<p class="admin-field-help">Aucune formule disponible pour le moment.</p>';
+}
+
+async function renderComposeType(container, size) {
+  container.innerHTML = `
+    <a href="#compose" class="collection-detail__back">← Changer de formule</a>
+    <p class="section__eyebrow">Pack ${size}</p>
+    <h2 class="section__title">Quel type de produit ?</h2>
+    <div class="chooser-grid" id="composeTypeGrid"><p class="admin-field-help">Chargement...</p></div>`;
+
+  const grid = document.getElementById('composeTypeGrid');
+  const allPacks = await api('/packs');
+  cachePacks(allPacks);
+  const packsForSize = allPacks.filter((p) => p.size === size);
+
+  grid.innerHTML = packsForSize.map((p) => `
+    <a href="#compose/pack/${p.id}" class="chooser-card">
+      <span class="chooser-card__title">${p.collection.name}</span>
+      <span class="chooser-card__sub">${size} produits au choix</span>
+      <span class="chooser-card__price">${p.price} MAD</span>
+    </a>`).join('') || '<p class="admin-field-help">Aucun pack disponible pour cette taille.</p>';
+}
+
+async function renderComposePack(container, packId) {
+  container.innerHTML = '<p class="admin-field-help">Chargement...</p>';
+  const pack = await getPackById(packId);
+  if (!pack) { container.innerHTML = '<p class="admin-field-help">Pack introuvable.</p>'; return; }
+  cacheProducts(pack.eligibleProducts);
+
+  const selected = []; // {slug, name}
+
+  function cardsGridHTML() {
+    return pack.eligibleProducts.map((p) => `
+      <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}">
+        <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
+        <div class="product-card__bottle">${productMediaHTML(p)}</div>
+        <h3>${p.name}</h3>
+        <p class="product-card__notes">${p.notes || ''}</p>
+      </button>`).join('');
+  }
+
+  container.innerHTML = `
+    <a href="#compose/size/${pack.size}" class="collection-detail__back">← Changer de collection</a>
+    <p class="section__eyebrow">Composez votre ${pack.name}</p>
+    <h2 class="section__title">${pack.name}</h2>
+    <div id="composePackProgress"></div>
+    <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
+    <div class="compose-success" id="composePackSuccess" hidden></div>
+    <div class="compose-sticky-bar" id="composePackBar">
+      <div class="pack-modal__recap" id="composePackRecap"><span class="pack-modal__recap-empty">Aucun parfum sélectionné</span></div>
+      <button type="button" class="btn btn--gold" id="composePackCta" disabled>Ajouter au panier</button>
+    </div>`;
+
+  const progressEl = document.getElementById('composePackProgress');
+  const grid = document.getElementById('composePackGrid');
+  const recap = document.getElementById('composePackRecap');
+  const cta = document.getElementById('composePackCta');
+  const successPane = document.getElementById('composePackSuccess');
+  const bar = document.getElementById('composePackBar');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
-  const selected = []; // {slug, name, price, collection}
 
   function updateUI() {
-    progressText.textContent = `${selected.length}/${config.minItems}${selected.length >= config.minItems ? ' ✓' : ''}`;
-    const pct = Math.min(100, (selected.length / config.minItems) * 100);
-    fillEl.style.width = pct + '%';
+    progressEl.innerHTML = composeProgressHTML(selected.length, pack.size, 'parfum(s)');
+    const isFull = selected.length >= pack.size;
+    cards.forEach((card) => {
+      const isSelected = card.classList.contains('is-selected');
+      card.classList.toggle('is-disabled', isFull && !isSelected);
+    });
+    recap.innerHTML = '';
+    if (selected.length === 0) {
+      recap.innerHTML = '<span class="pack-modal__recap-empty">Aucun parfum sélectionné</span>';
+    } else {
+      selected.forEach((item) => {
+        const chip = document.createElement('span'); chip.className = 'pack-modal__chip';
+        const label = document.createElement('span'); label.textContent = item.name;
+        const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => toggleCard(item.slug));
+        chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
+      });
+    }
+    cta.disabled = selected.length !== pack.size;
+    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${pack.price} MAD`;
+  }
 
+  function toggleCard(slug) {
+    const card = cards.find((c) => c.dataset.slug === slug);
+    if (!card) return;
+    const isSelected = card.classList.contains('is-selected');
+    if (isSelected) {
+      card.classList.remove('is-selected');
+      const idx = selected.findIndex((s) => s.slug === slug);
+      if (idx > -1) selected.splice(idx, 1);
+    } else {
+      if (selected.length >= pack.size) {
+        card.classList.add('is-shaking');
+        setTimeout(() => card.classList.remove('is-shaking'), 400);
+        return;
+      }
+      card.classList.add('is-selected');
+      selected.push({ slug, name: card.dataset.name });
+    }
+    updateUI();
+  }
+
+  cards.forEach((card) => card.addEventListener('click', () => toggleCard(card.dataset.slug)));
+
+  cta.addEventListener('click', () => {
+    if (cta.disabled) return;
+    Cart.addPack(pack.id, pack.name, pack.price, selected.map((s) => s.slug), selected.map((s) => s.name));
+    grid.hidden = true;
+    bar.hidden = true;
+    successPane.hidden = false;
+    successPane.innerHTML = composeSuccessHTML(pack.name, selected.map((s) => s.name));
+    wireComposeSuccessActions(successPane);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  updateUI();
+}
+
+async function renderComposeFree(container) {
+  container.innerHTML = '<p class="admin-field-help">Chargement...</p>';
+  const config = await getFreePackConfig();
+  if (!config) { container.innerHTML = '<p class="admin-field-help">Le Free Pack n\'est pas disponible pour le moment.</p>'; return; }
+  cacheProducts(config.eligibleProducts);
+
+  const selected = []; // {slug, name, price, collection}
+
+  container.innerHTML = `
+    <a href="#compose" class="collection-detail__back">← Changer de formule</a>
+    <p class="section__eyebrow">${config.name}</p>
+    <h2 class="section__title">Choisissez vos produits</h2>
+    <div id="composeFreeProgress"></div>
+    <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
+      ${config.eligibleProducts.map((p) => `
+        <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.price}" data-collection="${p.collectionId}">
+          <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div class="product-card__bottle">${productMediaHTML(p)}</div>
+          <h3>${p.name}</h3>
+          <p class="product-card__notes">${p.notes || ''}</p>
+          <p class="product-card__price">${p.price} MAD</p>
+        </button>`).join('')}
+    </div>
+    <div class="compose-success" id="composeFreeSuccess" hidden></div>
+    <div class="compose-sticky-bar" id="composeFreeBar">
+      <div class="pack-modal__recap" id="composeFreeRecap"><span class="pack-modal__recap-empty">Aucun produit sélectionné</span></div>
+      <button type="button" class="btn btn--gold" id="composeFreeCta" disabled>Ajouter au panier</button>
+    </div>`;
+
+  const progressEl = document.getElementById('composeFreeProgress');
+  const grid = document.getElementById('composeFreeGrid');
+  const recap = document.getElementById('composeFreeRecap');
+  const cta = document.getElementById('composeFreeCta');
+  const successPane = document.getElementById('composeFreeSuccess');
+  const bar = document.getElementById('composeFreeBar');
+  const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
+
+  function updateUI() {
+    progressEl.innerHTML = composeProgressHTML(selected.length, config.minItems, 'produit(s)');
     if (!config.allowMixCategories && selected.length > 0) {
       const lockedCollection = selected[0].collection;
       cards.forEach((card) => {
@@ -669,26 +891,18 @@ function openFreePackModal(config) {
     } else {
       cards.forEach((card) => card.classList.remove('is-disabled'));
     }
-
     recap.innerHTML = '';
     if (selected.length === 0) {
-      const empty = document.createElement('span');
-      empty.className = 'pack-modal__recap-empty';
-      empty.textContent = 'Aucun produit sélectionné';
-      recap.appendChild(empty);
+      recap.innerHTML = '<span class="pack-modal__recap-empty">Aucun produit sélectionné</span>';
     } else {
       selected.forEach((item) => {
-        const chip = document.createElement('span');
-        chip.className = 'pack-modal__chip';
+        const chip = document.createElement('span'); chip.className = 'pack-modal__chip';
         const label = document.createElement('span'); label.textContent = item.name;
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button'; removeBtn.textContent = '×';
+        const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.textContent = '×';
         removeBtn.addEventListener('click', () => toggleCard(item.slug));
-        chip.appendChild(label); chip.appendChild(removeBtn);
-        recap.appendChild(chip);
+        chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
       });
     }
-
     const total = selected.reduce((s, i) => s + i.price, 0);
     cta.disabled = selected.length < config.minItems;
     cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${total} MAD`;
@@ -712,308 +926,38 @@ function openFreePackModal(config) {
 
   cards.forEach((card) => card.addEventListener('click', () => toggleCard(card.dataset.slug)));
 
-  cta.onclick = () => {
+  cta.addEventListener('click', () => {
     if (cta.disabled) return;
     const total = selected.reduce((s, i) => s + i.price, 0);
     Cart.addFreePack(config.name, total, selected.map((s) => s.slug), selected.map((s) => s.name));
-
-    successList.innerHTML = '';
-    selected.forEach((item) => {
-      const li = document.createElement('li'); li.textContent = item.name; successList.appendChild(li);
-    });
-    grid.style.display = 'none';
-    progressWrap.style.display = 'none';
+    grid.hidden = true;
+    bar.hidden = true;
     successPane.hidden = false;
-    body.scrollTop = 0;
-  };
+    successPane.innerHTML = composeSuccessHTML(config.name, selected.map((s) => s.name));
+    wireComposeSuccessActions(successPane);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
-  document.getElementById('freePackModalViewCart').onclick = () => {
-    closeFreePackModal();
-    Cart.open('bag');
-  };
-
-  successPane.hidden = true;
-  grid.style.display = '';
-  progressWrap.style.display = '';
   updateUI();
-
-  modal.classList.add('pack-modal--open');
-  modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
 }
 
-function closeFreePackModal() {
-  const modal = document.getElementById('freePackModal');
-  modal.classList.remove('pack-modal--open');
-  modal.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = '';
+function composeSuccessHTML(name, itemNames) {
+  return `
+    <div class="pack-modal__success-icon">
+      <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h3>${name} ajouté au panier</h3>
+    <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
+    <ul class="pack-modal__success-list">${itemNames.map((n) => `<li>${n}</li>`).join('')}</ul>
+    <div class="compose-success__actions">
+      <button type="button" class="btn btn--gold js-compose-view-cart">Voir mon panier</button>
+      <a href="#compose" class="btn btn--outline">Composer un autre pack</a>
+    </div>`;
 }
 
-document.getElementById('freePackModalClose').addEventListener('click', closeFreePackModal);
-document.getElementById('freePackModalBackdrop').addEventListener('click', closeFreePackModal);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.getElementById('freePackModal').classList.contains('pack-modal--open')) closeFreePackModal();
-});
-
-// ===========================
-// CLASSIC PACK MODAL (composer)
-// ===========================
-let PackModal = null;
-
-function initPackModal() {
-  const modal = document.getElementById('packModal');
-  const backdrop = document.getElementById('packModalBackdrop');
-  const closeBtn = document.getElementById('packModalClose');
-  const eyebrow = document.getElementById('packModalEyebrow');
-  const title = document.getElementById('packModalTitle');
-  const countEl = document.getElementById('packModalCount');
-  const totalEl = document.getElementById('packModalTotal');
-  const fillEl = document.getElementById('packModalFill');
-  const grid = document.getElementById('packModalGrid');
-  const recap = document.getElementById('packModalRecap');
-  const cta = document.getElementById('packModalCta');
-  const body = document.getElementById('packModalBody');
-  const successPane = document.getElementById('packModalSuccess');
-  const successList = document.getElementById('packModalSuccessList');
-  const viewCartBtn = document.getElementById('packModalViewCart');
-  const progressWrap = modal.querySelector('.pack-modal__progress');
-
-  let packSize = 0, packId = null, packName = '', packPrice = 0;
-  let cards = [];
-  const selected = [];
-
-  async function openModal(id) {
-    const pack = await getPackById(id);
-    if (!pack) return;
-    cacheProducts(pack.eligibleProducts);
-
-    packId = pack.id; packSize = pack.size; packName = pack.name; packPrice = pack.price;
-    selected.length = 0;
-
-    eyebrow.textContent = `Composez votre ${pack.name}`;
-    title.textContent = pack.name;
-    totalEl.textContent = packSize;
-
-    grid.innerHTML = pack.eligibleProducts.map((p) => `
-      <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}">
-        <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
-        <div class="product-card__bottle">${productMediaHTML(p)}</div>
-        <h3>${p.name}</h3>
-        <p class="product-card__notes">${p.notes || ''}</p>
-      </button>`).join('');
-
-    cards = Array.from(grid.querySelectorAll('.fragrance-card'));
-    cards.forEach((card) => card.addEventListener('click', () => toggleCard(card.dataset.slug)));
-
-    successPane.hidden = true;
-    grid.style.display = '';
-    progressWrap.style.display = '';
-    updateUI();
-
-    modal.classList.add('pack-modal--open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeModal() {
-    modal.classList.remove('pack-modal--open');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  function updateUI() {
-    countEl.textContent = selected.length;
-    fillEl.style.width = (packSize ? Math.min(100, (selected.length / packSize) * 100) : 0) + '%';
-
-    const isFull = selected.length >= packSize;
-    cards.forEach((card) => {
-      const isSelected = card.classList.contains('is-selected');
-      card.classList.toggle('is-disabled', isFull && !isSelected);
-    });
-
-    recap.innerHTML = '';
-    if (selected.length === 0) {
-      const empty = document.createElement('span');
-      empty.className = 'pack-modal__recap-empty'; empty.textContent = 'Aucun parfum sélectionné';
-      recap.appendChild(empty);
-    } else {
-      selected.forEach((item) => {
-        const chip = document.createElement('span'); chip.className = 'pack-modal__chip';
-        const label = document.createElement('span'); label.textContent = item.name;
-        const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', () => toggleCard(item.slug));
-        chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
-      });
-    }
-
-    cta.disabled = selected.length !== packSize || packSize === 0;
-    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${packPrice} MAD`;
-  }
-
-  function toggleCard(slug) {
-    const card = cards.find((c) => c.dataset.slug === slug);
-    if (!card) return;
-    const isSelected = card.classList.contains('is-selected');
-    if (isSelected) {
-      card.classList.remove('is-selected');
-      const idx = selected.findIndex((s) => s.slug === slug);
-      if (idx > -1) selected.splice(idx, 1);
-    } else {
-      if (selected.length >= packSize) {
-        card.classList.add('is-shaking');
-        setTimeout(() => card.classList.remove('is-shaking'), 400);
-        return;
-      }
-      card.classList.add('is-selected');
-      selected.push({ slug, name: card.dataset.name });
-    }
-    updateUI();
-  }
-
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.js-open-pack');
-    if (!btn) return;
-    openModal(btn.dataset.packId);
-  });
-
-  closeBtn.addEventListener('click', closeModal);
-  backdrop.addEventListener('click', closeModal);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.classList.contains('pack-modal--open')) closeModal();
-  });
-
-  cta.addEventListener('click', () => {
-    if (cta.disabled) return;
-    if (Cart) Cart.addPack(packId, packName, packPrice, selected.map((s) => s.slug), selected.map((s) => s.name));
-
-    successList.innerHTML = '';
-    selected.forEach((item) => {
-      const li = document.createElement('li'); li.textContent = item.name; successList.appendChild(li);
-    });
-    grid.style.display = 'none';
-    progressWrap.style.display = 'none';
-    successPane.hidden = false;
-    body.scrollTop = 0;
-  });
-
-  if (viewCartBtn) {
-    viewCartBtn.addEventListener('click', () => { closeModal(); if (Cart) Cart.open('bag'); });
-  }
-
-  return { open: openModal };
-}
-
-// ===========================
-// PACK CHOOSER — "Composer mon pack" entry point.
-// Step 1: pick a formula (pack size, or Free Pack). Step 2 (fixed packs only):
-// pick which collection to compose from. Delegates to the existing pack /
-// free-pack modals for the actual product selection.
-// ===========================
-function initPackChooser() {
-  const modal = document.getElementById('packChooserModal');
-  const backdrop = document.getElementById('packChooserBackdrop');
-  const closeBtn = document.getElementById('packChooserClose');
-  const title = document.getElementById('packChooserTitle');
-  const stepFormula = document.getElementById('chooserStepFormula');
-  const stepType = document.getElementById('chooserStepType');
-  const typeGrid = document.getElementById('chooserTypeGrid');
-  const backToFormulaBtn = document.getElementById('chooserBackToFormula');
-  if (!modal) return null;
-
-  function close() {
-    modal.classList.remove('pack-modal--open');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  function showStep(step) {
-    stepFormula.hidden = step !== 'formula';
-    stepType.hidden = step !== 'type';
-    title.textContent = step === 'formula' ? 'Choisissez votre formule' : 'Quel type de produit ?';
-  }
-
-  async function open() {
-    modal.classList.add('pack-modal--open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    showStep('formula');
-    stepFormula.innerHTML = '<p class="admin-field-help" style="text-align:center;">Chargement...</p>';
-
-    const [allPacks, freePackConfig] = await Promise.all([api('/packs'), getFreePackConfig()]);
-    cachePacks(allPacks);
-
-    const bySize = new Map();
-    allPacks.forEach((p) => {
-      if (!bySize.has(p.size)) bySize.set(p.size, []);
-      bySize.get(p.size).push(p);
-    });
-    const sizes = Array.from(bySize.keys()).sort((a, b) => a - b);
-
-    const cardsHTML = sizes.map((size) => {
-      const packsForSize = bySize.get(size);
-      const prices = packsForSize.map((p) => p.price);
-      const priceLabel = Math.min(...prices) === Math.max(...prices) ? `${prices[0]} MAD` : `dès ${Math.min(...prices)} MAD`;
-      return `
-        <button type="button" class="chooser-card" data-size="${size}">
-          <span class="chooser-card__title">Pack ${size}</span>
-          <span class="chooser-card__sub">${size} produits au choix</span>
-          <span class="chooser-card__price">${priceLabel}</span>
-        </button>`;
-    }).join('');
-
-    const freePackCardHTML = freePackConfig && freePackConfig.eligibleProducts && freePackConfig.eligibleProducts.length >= freePackConfig.minItems
-      ? `<button type="button" class="chooser-card chooser-card--gold" data-freepack="1">
-          <span class="chooser-card__title">${freePackConfig.name}</span>
-          <span class="chooser-card__sub">Composez 100% librement (min. ${freePackConfig.minItems} produits)</span>
-          <span class="chooser-card__price">Pack sur-mesure</span>
-        </button>`
-      : '';
-
-    stepFormula.innerHTML = `<div class="chooser-grid">${cardsHTML}${freePackCardHTML}</div>`;
-
-    stepFormula.querySelectorAll('.chooser-card[data-size]').forEach((card) => {
-      card.addEventListener('click', () => {
-        const size = Number(card.dataset.size);
-        const packsForSize = bySize.get(size);
-        typeGrid.innerHTML = packsForSize.map((p) => `
-          <button type="button" class="chooser-card" data-pack-id="${p.id}">
-            <span class="chooser-card__title">${p.collection.name}</span>
-            <span class="chooser-card__sub">${size} produits au choix</span>
-            <span class="chooser-card__price">${p.price} MAD</span>
-          </button>`).join('');
-        showStep('type');
-      });
-    });
-
-    const freeCard = stepFormula.querySelector('.chooser-card[data-freepack]');
-    if (freeCard) {
-      freeCard.addEventListener('click', () => { close(); openFreePackModal(freePackConfig); });
-    }
-  }
-
-  typeGrid.addEventListener('click', (e) => {
-    const btn = e.target.closest('.chooser-card[data-pack-id]');
-    if (!btn) return;
-    close();
-    if (PackModal) PackModal.open(btn.dataset.packId);
-  });
-
-  backToFormulaBtn.addEventListener('click', () => showStep('formula'));
-  closeBtn.addEventListener('click', close);
-  backdrop.addEventListener('click', close);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.classList.contains('pack-modal--open')) close();
-  });
-
-  document.addEventListener('click', (e) => {
-    const trigger = e.target.closest('a[href="#pack-chooser"]');
-    if (!trigger) return;
-    e.preventDefault();
-    open();
-  });
-
-  return { open };
+function wireComposeSuccessActions(scope) {
+  const btn = scope.querySelector('.js-compose-view-cart');
+  if (btn) btn.addEventListener('click', () => Cart.open('bag'));
 }
 
 // ===========================
@@ -1039,6 +983,7 @@ function initQuickView() {
     nameEl.textContent = product.name;
     body.innerHTML = productDetailBodyHTML(product, true);
     wireProductDetailActions(body, product);
+    startVisitorCounter(body.querySelector('.js-visitor-counter'));
 
     modal.classList.add('pack-modal--open');
     modal.setAttribute('aria-hidden', 'false');
@@ -1062,8 +1007,11 @@ function initQuickView() {
 // ===========================
 // PRODUCT DETAIL (shared between the full page view and Quick View)
 // ===========================
+let visitorCounterSeq = 0;
+
 function productDetailBodyHTML(p, compact) {
   const col = p.collection ? p.collection.name : '';
+  const isPerfume = p.collection && p.collection.slug === 'parfums';
   const notesHTML = (p.notesTop || p.notesHeart || p.notesBase) ? `
     <div class="product-detail__notes">
       ${p.notesTop ? `<p><strong>Notes de tête</strong> — ${p.notesTop}</p>` : ''}
@@ -1071,16 +1019,24 @@ function productDetailBodyHTML(p, compact) {
       ${p.notesBase ? `<p><strong>Notes de fond</strong> — ${p.notesBase}</p>` : ''}
     </div>` : '';
 
+  visitorCounterSeq += 1;
+  const counterId = `visitorCounter${visitorCounterSeq}`;
+
   return `
     <div class="product-detail__visual">${productMediaHTML(p)}</div>
     <div class="product-detail__info">
       ${!compact ? `<a href="#collection/${p.collection ? p.collection.slug : ''}" class="collection-detail__back">← Retour à la collection</a>` : ''}
       ${col ? `<p class="section__eyebrow">${col}</p>` : ''}
       <h1 style="${compact ? 'font-size:26px;' : ''}">${p.name}</h1>
-      <p class="product-detail__price">${p.price} MAD</p>
+      <div class="product-detail__meta-row">
+        <p class="product-detail__price">${p.price} MAD</p>
+        ${p.volume ? `<span class="product-detail__volume">${p.volume}</span>` : ''}
+      </div>
       <p class="product-detail__availability ${p.stock > 0 ? 'is-available' : 'is-unavailable'}">${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
+      <p class="visitor-counter js-visitor-counter" id="${counterId}" data-count="0"></p>
       ${p.description ? `<p class="product-detail__description">${p.description}</p>` : ''}
       ${notesHTML}
+      ${isPerfume ? `<p class="product-detail__disclaimer">${(siteSettingsCache && siteSettingsCache.perfumeDisclaimer) || 'Inspiré des plus grands parfums — non affilié aux marques citées.'}</p>` : ''}
       <div class="product-detail__actions">
         <div class="qty-selector">
           <button type="button" class="qty-minus" aria-label="Diminuer">−</button>
@@ -1090,6 +1046,26 @@ function productDetailBodyHTML(p, compact) {
         <button type="button" class="btn btn--gold js-detail-add" data-slug="${p.slug}" ${p.stock <= 0 ? 'disabled' : ''}>Ajouter au panier</button>
       </div>
     </div>`;
+}
+
+// Discreet, elegant "social proof" indicator — purely cosmetic, randomized
+// client-side, never backed by real visitor tracking.
+function startVisitorCounter(el) {
+  if (!el) return;
+  function tick() {
+    const n = Math.floor(Math.random() * 31); // 0–30 inclusive
+    el.textContent = n <= 1
+      ? `${n} personne regarde ce produit maintenant`
+      : `${n} personnes regardent ce produit maintenant`;
+    el.hidden = n === 0 && Math.random() > 0.5; // occasionally go quiet, feels more organic
+  }
+  tick();
+  const interval = setInterval(tick, 4000 + Math.random() * 3000);
+  // Stop the ticker once this element leaves the DOM (route change) to avoid leaks.
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(el)) { clearInterval(interval); observer.disconnect(); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function wireProductDetailActions(scope, product) {
@@ -1174,7 +1150,9 @@ async function initNavExtras() {
 
   if (dropdown && panel) {
     try {
-      const collections = await api('/collections');
+      // Hiding a collection from the navbar (showInNav=false) must never hide
+      // it from the site — it stays fully reachable via /collections.
+      const collections = await api('/collections?nav=true');
       panel.innerHTML = collections.map((c) => `<a href="#collection/${c.slug}">${c.name}</a>`).join('');
     } catch (e) { /* ignore */ }
 
@@ -1194,6 +1172,123 @@ async function initNavExtras() {
       menuMount.innerHTML = items.map((i) => `<a href="${i.href}">${i.label}</a>`).join('');
     } catch (e) { /* ignore */ }
   }
+}
+
+// ===========================
+// SITE SETTINGS (WhatsApp / Instagram / perfume disclaimer)
+// ===========================
+let siteSettingsCache = null;
+async function getSiteSettings() {
+  if (siteSettingsCache) return siteSettingsCache;
+  try {
+    siteSettingsCache = await api('/settings');
+    return siteSettingsCache;
+  } catch (e) { return null; }
+}
+
+function whatsappHref(numberOrLink) {
+  if (!numberOrLink) return null;
+  if (numberOrLink.startsWith('http')) return numberOrLink;
+  const digits = numberOrLink.replace(/[^0-9+]/g, '');
+  return `https://wa.me/${digits.replace(/^\+/, '')}`;
+}
+
+// ===========================
+// CONTACT PAGE
+// ===========================
+async function initContactPage() {
+  const grid = document.getElementById('contactGrid');
+  const footerInstagram = document.getElementById('footerInstagram');
+  const footerWhatsapp = document.getElementById('footerWhatsapp');
+  if (!grid) return;
+
+  const settings = await getSiteSettings();
+  if (!settings) { grid.innerHTML = '<p class="admin-field-help">Informations de contact à venir.</p>'; return; }
+
+  const waHref = whatsappHref(settings.whatsappNumber);
+  const cards = [];
+
+  if (waHref) {
+    cards.push(`
+      <a href="${waHref}" target="_blank" rel="noopener" class="contact-card contact-card--whatsapp">
+        <div class="contact-card__icon"><svg viewBox="0 0 24 24"><path d="M20.5 3.5A11 11 0 0 0 3.7 17.4L2 22l4.8-1.6A11 11 0 1 0 20.5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.5 8.7c-.3.6-.5 1.4-.3 2.4.4 2 2.6 4.4 4.7 4.9 1 .2 1.8 0 2.4-.3.5-.2 1-.7 1.1-1.2l.1-.6-2-1c-.2-.1-.4-.1-.5.1l-.5.7c-.1.2-.3.2-.5.1-.7-.3-1.9-1.2-2.5-2.4-.1-.2 0-.4.1-.5l.6-.6c.1-.1.1-.3.1-.5l-.9-2c0-.1-.2-.2-.4-.2h-.7c-.2 0-.5.1-.7.1Z" fill="currentColor"/></svg></div>
+        <h3>WhatsApp</h3>
+        <p>Contactez-nous directement pour toute question, commande ou échange de points fidélité.</p>
+        <span class="contact-card__cta">Ouvrir WhatsApp →</span>
+      </a>`);
+    footerWhatsapp.href = waHref; footerWhatsapp.hidden = false;
+  }
+
+  if (settings.instagramLink || settings.instagramQrImage) {
+    cards.push(`
+      <div class="contact-card contact-card--instagram">
+        <div class="contact-card__icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor"/></svg></div>
+        <h3>Instagram</h3>
+        <p>Suivez-nous pour les nouveautés, les coulisses et les offres exclusives.</p>
+        ${settings.instagramQrImage ? `<img class="contact-card__qr" src="${settings.instagramQrImage}" alt="QR Code Instagram">` : ''}
+        ${settings.instagramLink ? `<a href="${settings.instagramLink}" target="_blank" rel="noopener" class="contact-card__cta">Voir le profil →</a>` : ''}
+      </div>`);
+    if (settings.instagramLink) { footerInstagram.href = settings.instagramLink; footerInstagram.hidden = false; }
+  }
+
+  grid.innerHTML = cards.join('') || '<p class="admin-field-help">Informations de contact à venir.</p>';
+}
+
+// ===========================
+// LOYALTY PAGE
+// ===========================
+async function initLoyaltyPage() {
+  const howEl = document.getElementById('loyaltyHowItWorks');
+  const form = document.getElementById('loyaltyForm');
+  const errorEl = document.getElementById('loyaltyError');
+  const submitBtn = document.getElementById('loyaltySubmitBtn');
+  const resultEl = document.getElementById('loyaltyResult');
+  if (!form) return;
+
+  // Public, generic "how it works" blurb (the customer's actual balance and
+  // available rewards are shown after verification, below).
+  if (howEl) {
+    howEl.innerHTML = `
+      <p><strong>Comment gagner des points ?</strong> Chaque commande livrée vous rapporte des points, proportionnellement au montant dépensé.</p>
+      <p><strong>Comment les utiliser ?</strong> Contactez-nous sur WhatsApp avec votre solde pour échanger vos points contre une récompense.</p>`;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    resultEl.hidden = true;
+    const fd = new FormData(form);
+    const fullName = fd.get('fullName').toString().trim();
+    const phone = fd.get('phone').toString().trim();
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Vérification...';
+    try {
+      const data = await api('/loyalty/lookup', { method: 'POST', body: JSON.stringify({ fullName, phone }) });
+      resultEl.hidden = false;
+      resultEl.innerHTML = `
+        <div class="loyalty-result__balance">
+          <p class="section__eyebrow">Bonjour ${data.fullName.split(' ')[0]}</p>
+          <p class="loyalty-result__points">${data.balance} <span>points</span></p>
+          ${data.nextReward ? `<p class="loyalty-result__next">Encore ${(data.nextReward.pointsRequired - data.balance).toFixed(2)} point(s) pour : ${data.nextReward.name}</p>` : ''}
+        </div>
+        ${data.availableRewards.length ? `
+          <div class="loyalty-result__rewards">
+            <h4>Récompenses accessibles</h4>
+            <ul>${data.availableRewards.map((r) => `<li>${r.name} — ${r.pointsRequired} pts</li>`).join('')}</ul>
+          </div>` : ''}
+        <div class="loyalty-result__history">
+          <h4>Historique</h4>
+          <ul>${data.history.slice(0, 8).map((h) => `<li><span>${new Date(h.date).toLocaleDateString('fr-FR')}</span><span>${h.points > 0 ? '+' : ''}${h.points} pts${h.note ? ` — ${h.note}` : ''}</span></li>`).join('') || '<li>Aucun mouvement pour le moment.</li>'}</ul>
+        </div>`;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Consulter mes points';
+    }
+  });
 }
 
 // ===========================
@@ -1254,11 +1349,7 @@ function initRevealAnimations() {
   async function renderCollectionsGrid() {
     if (collectionsLoaded) return;
     const collections = await api('/collections');
-    collectionsGrid.innerHTML = collections.map((c) => `
-      <a href="#collection/${c.slug}" class="collection-tile collection-tile--${c.slug}">
-        <span class="collection-tile__label">${c.name}</span>
-        <span class="collection-tile__sub">${c.description || ''}</span>
-      </a>`).join('');
+    collectionsGrid.innerHTML = collections.map(collectionTileHTML).join('');
     collectionsLoaded = true;
   }
 
@@ -1294,7 +1385,7 @@ function initRevealAnimations() {
               <p class="pack-card__count">${pack.size} produits</p>
               <p class="pack-card__price">${pack.price} <span>MAD</span></p>
               <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
-              <button type="button" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full js-open-pack" data-pack-id="${pack.id}">Choisir</button>
+              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">Composer</a>
             </div>`).join('')}
         </div>`;
       detailPacks.hidden = false;
@@ -1323,11 +1414,18 @@ function initRevealAnimations() {
     }
     mount.innerHTML = productDetailBodyHTML(product);
     wireProductDetailActions(mount, product);
+    startVisitorCounter(mount.querySelector('.js-visitor-counter'));
   }
+
+  const viewCompose = document.getElementById('view-compose');
+  const composeContainer = document.getElementById('composeContainer');
+  const viewLoyalty = document.getElementById('view-loyalty');
+  const viewContact = document.getElementById('view-contact');
+  const allViews = [viewHome, viewCollections, viewDetail, viewProduct, viewCompose, viewLoyalty, viewContact];
 
   async function route() {
     const hash = window.location.hash.replace('#', '');
-    viewHome.hidden = true; viewCollections.hidden = true; viewDetail.hidden = true; viewProduct.hidden = true;
+    allViews.forEach((v) => { if (v) v.hidden = true; });
 
     if (hash === 'collections') {
       viewCollections.hidden = false;
@@ -1343,6 +1441,30 @@ function initRevealAnimations() {
       viewProduct.hidden = false;
       window.scrollTo(0, 0);
       await renderProductDetail(slug);
+    } else if (hash === 'compose') {
+      viewCompose.hidden = false;
+      window.scrollTo(0, 0);
+      await renderComposeFormula(composeContainer);
+    } else if (hash.startsWith('compose/size/')) {
+      const size = Number(hash.split('/')[2]);
+      viewCompose.hidden = false;
+      window.scrollTo(0, 0);
+      await renderComposeType(composeContainer, size);
+    } else if (hash === 'compose/free') {
+      viewCompose.hidden = false;
+      window.scrollTo(0, 0);
+      await renderComposeFree(composeContainer);
+    } else if (hash.startsWith('compose/pack/')) {
+      const packId = hash.split('/')[2];
+      viewCompose.hidden = false;
+      window.scrollTo(0, 0);
+      await renderComposePack(composeContainer, packId);
+    } else if (hash === 'loyalty') {
+      viewLoyalty.hidden = false;
+      window.scrollTo(0, 0);
+    } else if (hash === 'contact') {
+      viewContact.hidden = false;
+      window.scrollTo(0, 0);
     } else {
       viewHome.hidden = false;
     }
@@ -1354,7 +1476,8 @@ function initRevealAnimations() {
 
 // Boot
 initHomepage();
-initPackChooser();
 initQuickView();
 initNavExtras();
 initSearch();
+initLoyaltyPage();
+initContactPage();
