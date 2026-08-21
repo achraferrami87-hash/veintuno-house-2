@@ -22,6 +22,12 @@ const adminLoyaltyRoutes = require('./routes/adminLoyalty');
 
 const app = express();
 
+// Railway (and most PaaS providers) terminate TLS at their edge and forward
+// plain HTTP internally. Without this, Express thinks every request is
+// insecure, so a `secure` cookie never actually gets set — silently breaking
+// admin login in production while working fine locally.
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(cookieSession({
   name: 'veintuno_admin_session',
