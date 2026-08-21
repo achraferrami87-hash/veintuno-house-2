@@ -113,6 +113,8 @@ router.put('/free-pack/config', async (req, res) => {
   if (body.minItems !== undefined) data.minItems = Number(body.minItems);
   if (body.allowMixCategories !== undefined) data.allowMixCategories = !!body.allowMixCategories;
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
+  if (body.priceThreshold !== undefined) data.priceThreshold = Number(body.priceThreshold);
+  if (body.flatPrice !== undefined) data.flatPrice = Number(body.flatPrice);
 
   await prisma.freePackConfig.update({ where: { id: config.id }, data });
 

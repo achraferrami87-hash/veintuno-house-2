@@ -8,7 +8,12 @@ const router = express.Router();
 function parseImages(product) {
   let images = [];
   try { images = JSON.parse(product.images || '[]'); } catch (e) { images = []; }
-  return { ...product, images };
+  let genders = [];
+  try { genders = JSON.parse(product.genders || '[]'); } catch (e) { genders = []; }
+  // Backward compatibility: a product only ever migrated with the old
+  // single `gender` value still resolves correctly even if `genders` is empty.
+  if (genders.length === 0 && product.gender) genders = [product.gender];
+  return { ...product, images, genders };
 }
 
 // ---------- Site settings (WhatsApp / Instagram / perfume disclaimer) ----------
@@ -133,7 +138,36 @@ router.get('/free-pack', async (req, res) => {
     name: config.name,
     minItems: config.minItems,
     allowMixCategories: config.allowMixCategories,
+    priceThreshold: config.priceThreshold,
+    flatPrice: config.flatPrice,
     eligibleProducts: Array.from(merged.values()).map(parseImages),
+  });
+});
+
+// ---------- Bundles ----------
+router.get('/bundles', async (req, res) => {
+  const bundles = await prisma.bundle.findMany({
+    where: { isActive: true },
+    orderBy: { position: 'asc' },
+    include: { items: { include: { product: true } } },
+  });
+  res.json(bundles.map((b) => ({
+    id: b.id, slug: b.slug, name: b.name, description: b.description,
+    image: b.image, price: b.price,
+    items: b.items.map((it) => ({ product: parseImages(it.product), quantity: it.quantity })),
+  })));
+});
+
+router.get('/bundles/:slug', async (req, res) => {
+  const bundle = await prisma.bundle.findUnique({
+    where: { slug: req.params.slug },
+    include: { items: { include: { product: true } } },
+  });
+  if (!bundle || !bundle.isActive) return res.status(404).json({ error: 'Bundle introuvable.' });
+  res.json({
+    id: bundle.id, slug: bundle.slug, name: bundle.name, description: bundle.description,
+    image: bundle.image, price: bundle.price,
+    items: bundle.items.map((it) => ({ product: parseImages(it.product), quantity: it.quantity })),
   });
 });
 
@@ -166,6 +200,20 @@ router.get('/homepage', async (req, res) => {
         const collections = await prisma.collection.findMany({ where: { slug: { in: config.collectionSlugs }, isActive: true } });
         const ordered = config.collectionSlugs.map((s) => collections.find((c) => c.slug === s)).filter(Boolean);
         config = { ...config, collections: ordered };
+      }
+      if (section.type === 'BUNDLES') {
+        const bundles = await prisma.bundle.findMany({
+          where: { isActive: true },
+          orderBy: { position: 'asc' },
+          include: { items: { include: { product: true } } },
+        });
+        config = {
+          ...config,
+          bundles: bundles.map((b) => ({
+            id: b.id, slug: b.slug, name: b.name, description: b.description, image: b.image, price: b.price,
+            items: b.items.map((it) => ({ product: parseImages(it.product), quantity: it.quantity })),
+          })),
+        };
       }
       if (section.type === 'PACKS' && config.collectionSlug) {
         const col = await prisma.collection.findUnique({ where: { slug: config.collectionSlug } });
@@ -235,6 +283,133 @@ router.post('/loyalty/lookup', async (req, res) => {
     availableRewards: rewards.filter((r) => r.pointsRequired <= balance),
     nextReward: nextReward || null,
   });
+});
+
+// ---------- Order receipt (phone-protected: order number + phone must match) ----------
+router.get('/orders/:orderNumber/receipt', async (req, res) => {
+  const phone = (req.query.phone || '').toString().trim();
+  if (!phone) return res.status(400).json({ error: 'Numéro de téléphone requis.' });
+
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: req.params.orderNumber },
+    include: {
+      items: { include: { components: true } },
+      promoCode: true,
+    },
+  });
+  if (!order || order.phone.trim() !== phone) return res.status(404).json({ error: 'Commande introuvable.' });
+
+  // Loyalty points earned/used tied to this order, for the receipt breakdown.
+  const ledgerEntries = await prisma.loyaltyLedger.findMany({ where: { orderId: order.id } });
+  const pointsEarned = ledgerEntries.filter((l) => l.type === 'EARNED').reduce((s, l) => s + l.points, 0);
+  const pointsRedeemed = ledgerEntries.filter((l) => l.type === 'REDEEMED').reduce((s, l) => s + Math.abs(l.points), 0);
+
+  res.json({
+    orderNumber: order.orderNumber,
+    createdAt: order.createdAt,
+    status: order.status,
+    fullName: order.fullName,
+    phone: order.phone,
+    address: order.address,
+    city: order.city,
+    items: order.items.map((it) => ({
+      kind: it.kind, name: it.name, unitPrice: it.unitPrice, quantity: it.quantity,
+      detail: it.detail, components: it.components.map((c) => c.name),
+    })),
+    subtotal: order.subtotal,
+    discountAmount: order.discountAmount,
+    promoCode: order.promoCode ? order.promoCode.code : null,
+    deliveryFee: order.deliveryFee,
+    total: order.total,
+    pointsEarned,
+    pointsRedeemed,
+  });
+});
+
+// ---------- Loyalty: "Réclamer vos points" redemption request ----------
+router.post('/loyalty/redeem-request', async (req, res) => {
+  const { phone, fullName, rewardId } = req.body;
+  if (!phone || !fullName) return res.status(400).json({ error: 'Téléphone et nom complet requis.' });
+
+  const customer = await prisma.customer.findUnique({ where: { phone: phone.trim() } });
+  if (!customer || customer.fullName.trim().toLowerCase() !== fullName.trim().toLowerCase()) {
+    return res.status(404).json({ error: 'Aucun compte fidélité trouvé avec ces informations.' });
+  }
+
+  const ledger = await prisma.loyaltyLedger.findMany({ where: { customerId: customer.id } });
+  const balance = ledger.reduce((s, l) => s + l.points, 0);
+
+  let reward = null;
+  if (rewardId) reward = await prisma.loyaltyReward.findUnique({ where: { id: rewardId } });
+
+  await prisma.loyaltyRedemptionRequest.create({
+    data: {
+      fullName: customer.fullName,
+      phone: customer.phone,
+      pointsAtRequest: balance,
+      requestedRewardId: reward ? reward.id : null,
+      requestedRewardName: reward ? reward.name : null,
+    },
+  });
+
+  res.json({ message: 'Votre demande a bien été reçue. Nous allons vous contacter prochainement.' });
+});
+
+// ---------- Reviews (customer-facing) ----------
+router.get('/products/:slug/reviews', async (req, res) => {
+  const product = await prisma.product.findUnique({ where: { slug: req.params.slug } });
+  if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
+  const reviews = await prisma.review.findMany({
+    where: { productId: product.id, status: 'APPROVED' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+  res.json({
+    reviews: reviews.map((r) => ({ rating: r.rating, text: r.text, customerName: r.customerName, date: r.createdAt })),
+    avgRating,
+    count: reviews.length,
+  });
+});
+
+router.post('/reviews', async (req, res) => {
+  const { productSlug, orderNumber, phone, rating, text, customerName } = req.body;
+  const ratingNum = parseInt(rating, 10);
+  if (!productSlug || !orderNumber || !phone || !ratingNum || ratingNum < 1 || ratingNum > 5) {
+    return res.status(400).json({ error: 'Informations manquantes ou note invalide (1 à 5).' });
+  }
+
+  const product = await prisma.product.findUnique({ where: { slug: productSlug } });
+  if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
+
+  // Only a customer with a DELIVERED order containing this product, matched
+  // by phone, is allowed to leave a review — prevents drive-by fake reviews.
+  // The product may appear directly (PRODUCT item) or as a component of a
+  // PACK/FREE_PACK/BUNDLE item, so both places must be checked.
+  const order = await prisma.order.findUnique({
+    where: { orderNumber },
+    include: { items: { include: { components: true } } },
+  });
+  if (!order || order.phone.trim() !== phone.trim() || order.status !== 'DELIVERED') {
+    return res.status(403).json({ error: 'Seules les commandes livrées peuvent être notées.' });
+  }
+  const hasProduct = order.items.some((it) => it.productId === product.id || it.components.some((c) => c.productId === product.id));
+  if (!hasProduct) return res.status(403).json({ error: 'Ce produit ne fait pas partie de cette commande.' });
+
+  const existing = await prisma.review.findFirst({ where: { orderId: order.id, productId: product.id } });
+  if (existing) return res.status(400).json({ error: 'Vous avez déjà noté ce produit pour cette commande.' });
+
+  await prisma.review.create({
+    data: {
+      productId: product.id,
+      orderId: order.id,
+      rating: ratingNum,
+      text: text || null,
+      customerName: customerName || order.fullName,
+      status: 'PENDING',
+    },
+  });
+
+  res.json({ message: 'Merci pour votre avis ! Il sera visible après validation par notre équipe.' });
 });
 
 // ---------- Promo validation ----------
@@ -310,7 +485,8 @@ router.post('/orders', async (req, res) => {
           stockNeeds.set(item.productId, (stockNeeds.get(item.productId) || 0) + item.quantity);
         } else {
           for (const comp of item.components) {
-            stockNeeds.set(comp.productId, (stockNeeds.get(comp.productId) || 0) + item.quantity);
+            const per = comp.quantity || 1;
+            stockNeeds.set(comp.productId, (stockNeeds.get(comp.productId) || 0) + item.quantity * per);
           }
         }
       }
@@ -356,6 +532,7 @@ router.post('/orders', async (req, res) => {
             detail: item.detail || null,
             productId: item.kind === 'PRODUCT' ? item.productId : null,
             packId: item.kind === 'PACK' ? item.packId : null,
+            bundleId: item.kind === 'BUNDLE' ? item.bundleId : null,
           },
         });
         if (item.components) {
@@ -437,14 +614,20 @@ async function resolveItemsPricing(items) {
       const slugs = Array.isArray(raw.componentSlugs) ? raw.componentSlugs : [];
       if (slugs.length !== pack.size) return { error: `Le pack "${pack.name}" nécessite exactement ${pack.size} produits.` };
 
-      const components = await prisma.product.findMany({ where: { slug: { in: slugs } } });
-      if (components.length !== slugs.length) return { error: 'Un des produits du pack est introuvable.' };
+      // Look up by the unique set of slugs (findMany dedupes on the DB side),
+      // then re-expand against the original (possibly repeated) slugs list so
+      // a customer can pick the same perfume more than once within a pack.
+      const uniqueSlugs = [...new Set(slugs)];
+      const uniqueProducts = await prisma.product.findMany({ where: { slug: { in: uniqueSlugs } } });
+      if (uniqueProducts.length !== uniqueSlugs.length) return { error: 'Un des produits du pack est introuvable.' };
+      const bySlug = new Map(uniqueProducts.map((p) => [p.slug, p]));
+      const components = slugs.map((s) => bySlug.get(s));
 
       const allowedIds = pack.useCollectionEligibility
         ? null
         : new Set(pack.eligibleProducts.map((r) => r.productId));
 
-      for (const comp of components) {
+      for (const comp of uniqueProducts) {
         if (!comp.isActive) return { error: `"${comp.name}" n'est plus disponible.` };
         if (pack.useCollectionEligibility && comp.collectionId !== pack.collectionId) {
           return { error: `"${comp.name}" n'est pas éligible pour ce pack.` };
@@ -457,7 +640,7 @@ async function resolveItemsPricing(items) {
       resolved.push({
         kind: 'PACK', packId: pack.id, collectionId: pack.collectionId,
         name: pack.name, unitPrice: pack.price, quantity,
-        detail: `${pack.size} produits — ${components.map((c) => c.name).join(', ')}`,
+        detail: `${pack.size} produits — ${summarizeComponentCounts(components)}`,
         components: components.map((c) => ({ productId: c.id, name: c.name })),
       });
       continue;
@@ -475,30 +658,55 @@ async function resolveItemsPricing(items) {
         return { error: `Le ${config.name} nécessite au moins ${config.minItems} produits.` };
       }
 
-      const components = await prisma.product.findMany({ where: { slug: { in: slugs } } });
-      if (components.length !== slugs.length) return { error: 'Un des produits sélectionnés est introuvable.' };
+      const uniqueSlugs = [...new Set(slugs)];
+      const uniqueProducts = await prisma.product.findMany({ where: { slug: { in: uniqueSlugs } } });
+      if (uniqueProducts.length !== uniqueSlugs.length) return { error: 'Un des produits sélectionnés est introuvable.' };
+      const bySlug = new Map(uniqueProducts.map((p) => [p.slug, p]));
+      const components = slugs.map((s) => bySlug.get(s));
 
       const eligibleCollectionIds = new Set(config.eligibleCollections.map((r) => r.collectionId));
       const eligibleProductIds = new Set(config.eligibleProducts.map((r) => r.productId));
 
-      for (const comp of components) {
+      for (const comp of uniqueProducts) {
         const ok = comp.isActive && (comp.freePackEligible || eligibleProductIds.has(comp.id) || eligibleCollectionIds.has(comp.collectionId));
         if (!ok) return { error: `"${comp.name}" n'est pas éligible pour le ${config.name}.` };
       }
 
       if (!config.allowMixCategories) {
-        const distinctCollections = new Set(components.map((c) => c.collectionId));
+        const distinctCollections = new Set(uniqueProducts.map((c) => c.collectionId));
         if (distinctCollections.size > 1) {
           return { error: `Le ${config.name} ne permet pas de mélanger plusieurs catégories.` };
         }
       }
 
-      const unitPrice = components.reduce((s, c) => s + c.price, 0);
+      // Threshold-based flat pricing: below the threshold, the customer pays
+      // the normal sum of individual prices — the flat price only kicks in
+      // once the selected perfumes' combined value reaches priceThreshold.
+      const componentsTotal = components.reduce((s, c) => s + c.price, 0);
+      const unitPrice = componentsTotal >= config.priceThreshold ? config.flatPrice : componentsTotal;
       resolved.push({
         kind: 'FREE_PACK', collectionId: null,
         name: config.name, unitPrice, quantity,
-        detail: components.map((c) => c.name).join(', '),
+        detail: summarizeComponentCounts(components),
         components: components.map((c) => ({ productId: c.id, name: c.name })),
+      });
+      continue;
+    }
+
+    if (raw.kind === 'BUNDLE') {
+      const bundle = await prisma.bundle.findUnique({
+        where: { id: raw.bundleId },
+        include: { items: { include: { product: true } } },
+      });
+      if (!bundle || !bundle.isActive) return { error: 'Bundle introuvable.' };
+      for (const it of bundle.items) {
+        if (!it.product.isActive) return { error: `"${it.product.name}" n'est plus disponible.` };
+      }
+      resolved.push({
+        kind: 'BUNDLE', bundleId: bundle.id, collectionId: null,
+        name: bundle.name, unitPrice: bundle.price, quantity,
+        detail: bundle.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', '),
+        components: bundle.items.map((it) => ({ productId: it.productId, name: it.product.name, quantity: it.quantity })),
       });
       continue;
     }
@@ -507,6 +715,14 @@ async function resolveItemsPricing(items) {
   }
 
   return { items: resolved };
+}
+
+// Turns a (possibly repeated) list of products into a readable summary like
+// "Atlas Noir ×2, Minuit Cuir" instead of listing the same name repeatedly.
+function summarizeComponentCounts(components) {
+  const counts = new Map();
+  for (const c of components) counts.set(c.name, (counts.get(c.name) || 0) + 1);
+  return Array.from(counts.entries()).map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join(', ');
 }
 
 module.exports = router;

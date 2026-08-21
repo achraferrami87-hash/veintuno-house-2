@@ -49,7 +49,8 @@ model Product {
   notesTop          String?
   notesHeart        String?
   notesBase         String?
-  gender            String? // homme | femme | unisexe (perfumes only, nullable elsewhere)
+  gender            String? // legacy single value — kept for backward compatibility, no longer written to
+  genders           String   @default("[]") // JSON array — a product can belong to several genders at once (e.g. Homme + Femme)
   volume            String?  @default("50ML")
   price             Float
   stock             Int      @default(0)
@@ -77,6 +78,8 @@ model Product {
   orderItemComponents  OrderItemComponent[]
   stockLogs            StockLog[]
   promoCodeProducts    PromoCodeProduct[]
+  bundleItems          BundleItem[]
+  reviews              Review[]
 }
 
 // ===========================
@@ -119,6 +122,11 @@ model FreePackConfig {
   name               String   @default("FREE PACK")
   minItems           Int      @default(3)
   allowMixCategories Boolean  @default(true)
+  // Flat-price rule: if the selected products' combined value reaches
+  // priceThreshold, the customer pays flatPrice instead of the sum.
+  // Below the threshold, normal individual pricing applies (no discount).
+  priceThreshold     Float    @default(150)
+  flatPrice          Float    @default(66.34)
   isActive           Boolean  @default(true)
   updatedAt          DateTime @updatedAt
 
@@ -231,6 +239,7 @@ model Order {
 
   items         OrderItem[]
   loyaltyLedger LoyaltyLedger[]
+  reviews       Review[]
 }
 
 model OrderItem {
@@ -249,6 +258,9 @@ model OrderItem {
 
   packId String?
   pack   Pack?   @relation(fields: [packId], references: [id])
+
+  bundleId String?
+  bundle   Bundle? @relation(fields: [bundleId], references: [id])
 
   components OrderItemComponent[]
 }
@@ -364,6 +376,70 @@ model LoyaltyLedger {
   reward   LoyaltyReward? @relation(fields: [rewardId], references: [id])
 
   reversesEntryId String?
+}
+
+// Customer-initiated "claim my points" request — distinct from the ledger:
+// this is a request queue for the admin to action (contact the customer,
+// hand over the reward, mark it done), not a points movement by itself.
+model LoyaltyRedemptionRequest {
+  id                 String   @id @default(cuid())
+  fullName           String
+  phone              String
+  pointsAtRequest    Float
+  requestedRewardId  String?
+  requestedRewardName String?
+  status             String   @default("PENDING") // PENDING | CONTACTED | COMPLETED | REJECTED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ===========================
+// BUNDLES — fixed, admin-curated product sets at a custom flat price.
+// Independent from the classic Pack system (no customer choice involved).
+// ===========================
+model Bundle {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  image       String?
+  price       Float
+  isActive    Boolean  @default(true)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items     BundleItem[]
+  orderItems OrderItem[]
+}
+
+model BundleItem {
+  bundleId  String
+  productId String
+  quantity  Int    @default(1)
+  bundle    Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([bundleId, productId])
+}
+
+// ===========================
+// REVIEWS — submitted after a delivered order, hidden until admin-approved.
+// ===========================
+model Review {
+  id           String   @id @default(cuid())
+  rating       Int
+  text         String?
+  customerName String?
+  status       String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
 }
 
 // ===========================

@@ -110,6 +110,11 @@
   <div class="container" id="composeContainer"></div>
 </section>
 
+<!-- REÇU DE COMMANDE (page, protégée par numéro de commande + téléphone) -->
+<section class="view receipt-page" id="view-receipt" hidden>
+  <div class="container" id="receiptContainer" style="max-width:640px;"></div>
+</section>
+
 <!-- PROGRAMME DE FIDÉLITÉ (page) -->
 <section class="view loyalty-page" id="view-loyalty" hidden>
   <div class="container loyalty-layout">
@@ -300,6 +305,7 @@
         <h3>Merci, <span id="successCustomerName">votre commande</span> !</h3>
         <p>Commande <strong id="successOrderNumber"></strong> — notre équipe vous appellera pour confirmer la livraison. Paiement à la livraison.</p>
         <ul class="pack-modal__success-list" id="successOrderList"></ul>
+        <a href="#" id="successReceiptLink" class="btn btn--gold" style="margin-bottom:12px;">Voir mon reçu</a>
         <button type="button" class="btn btn--outline" id="cartContinueShopping">Continuer mes achats</button>
       </div>
     </div>

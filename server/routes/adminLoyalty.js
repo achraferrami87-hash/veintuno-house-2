@@ -214,4 +214,25 @@ router.post('/ledger/:id/reverse', async (req, res) => {
   res.status(201).json(entry);
 });
 
+// ---------- "Réclamer vos points" redemption requests ----------
+router.get('/redemption-requests', async (req, res) => {
+  const status = req.query.status;
+  const where = status ? { status } : {};
+  const requests = await prisma.loyaltyRedemptionRequest.findMany({ where, orderBy: { createdAt: 'desc' } });
+  res.json(requests);
+});
+
+router.put('/redemption-requests/:id', async (req, res) => {
+  const { status } = req.body;
+  if (!['PENDING', 'CONTACTED', 'COMPLETED', 'REJECTED'].includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide.' });
+  }
+  try {
+    const updated = await prisma.loyaltyRedemptionRequest.update({ where: { id: req.params.id }, data: { status } });
+    res.json(updated);
+  } catch (e) {
+    res.status(404).json({ error: 'Demande introuvable.' });
+  }
+});
+
 module.exports = router;

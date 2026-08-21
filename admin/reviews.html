@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avis clients — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Avis clients</h1>
+        <p>Validez les avis avant qu'ils n'apparaissent publiquement sur les fiches produit.</p>
+      </div>
+      <div class="admin-header__actions">
+        <select id="statusFilter">
+          <option value="">Tous les statuts</option>
+          <option value="PENDING">En attente</option>
+          <option value="APPROVED">Approuvés</option>
+          <option value="REJECTED">Rejetés</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Produit</th><th>Note</th><th>Avis</th><th>Client</th><th>Commande</th><th>Date</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="reviewsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let reviews = [];
+
+function stars(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
+
+function statusBadge(s) {
+  if (s === 'APPROVED') return '<span class="badge badge--green">Approuvé</span>';
+  if (s === 'REJECTED') return '<span class="badge badge--gray">Rejeté</span>';
+  return '<span class="badge badge--gold">En attente</span>';
+}
+
+function reviewRowHTML(r) {
+  return `
+    <tr data-id="${r.id}">
+      <td>${r.product ? r.product.name : '—'}</td>
+      <td style="color:#C9A227;">${stars(r.rating)}</td>
+      <td style="max-width:280px;">${r.text || '<em style="color:var(--gray);">—</em>'}</td>
+      <td>${r.customerName || '—'}</td>
+      <td>${r.order ? r.order.orderNumber : '—'}</td>
+      <td>${formatDate(r.createdAt)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td class="row-actions">
+        ${r.status !== 'APPROVED' ? '<button data-action="approve">Approuver</button>' : ''}
+        ${r.status !== 'REJECTED' ? '<button data-action="reject">Rejeter</button>' : ''}
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  const status = document.getElementById('statusFilter').value;
+  reviews = await adminApi(`/reviews${status ? `?status=${status}` : ''}`);
+  document.getElementById('reviewsBody').innerHTML = reviews.map(reviewRowHTML).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray);">Aucun avis.</td></tr>';
+}
+
+document.getElementById('statusFilter').addEventListener('change', loadAll);
+
+document.getElementById('reviewsBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  if (btn.dataset.action === 'approve') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'APPROVED' }) }); toast('Avis approuvé.'); await loadAll(); }
+  if (btn.dataset.action === 'reject') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'REJECTED' }) }); toast('Avis rejeté.'); await loadAll(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog('Supprimer définitivement cet avis ?');
+    if (!ok) return;
+    await adminApi(`/reviews/${id}`, { method: 'DELETE' }); toast('Avis supprimé.'); await loadAll();
+  }
+});
+
+(async () => {
+  const admin = await initAdminPage('reviews.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

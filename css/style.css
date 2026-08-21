@@ -497,6 +497,11 @@ em { font-style: italic; color: var(--gold); }
 .fragrance-card .product-card__bottle { width: 80px; margin: 16px auto 18px; }
 .fragrance-card h3 { font-family: var(--serif); font-size: 19px; margin-bottom: 4px; }
 .fragrance-card .product-card__notes { margin-bottom: 0; }
+.fragrance-card--stepper { cursor: default; }
+.fragrance-card--stepper.is-selected { border-color: var(--gold); }
+.fragrance-card__qty { justify-content: center; margin: 14px auto 0; width: fit-content; }
+.fragrance-card__qty-value { width: 32px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 14px; border-left: 1px solid rgba(0,0,0,0.15); border-right: 1px solid rgba(0,0,0,0.15); }
+.fragrance-card__qty .qty-minus:disabled, .fragrance-card__qty .qty-plus:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .fragrance-card__check {
   position: absolute;
@@ -1092,6 +1097,45 @@ em { font-style: italic; color: var(--gold); }
 .chooser-card__price { font-size: 13px; font-weight: 500; color: var(--gold); margin-top: 6px; }
 
 /* ===========================
+   Order receipt
+=========================== */
+.receipt-page { padding: 140px 0 100px; }
+.receipt-doc { background: var(--white); border: 1px solid rgba(0,0,0,0.1); padding: 40px; margin-bottom: 24px; }
+.receipt-doc__header { text-align: center; margin-bottom: 24px; border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 20px; }
+.receipt-doc__header .logo { font-family: var(--serif); font-size: 22px; letter-spacing: 0.06em; }
+.receipt-doc__header .logo span { color: var(--gold); margin: 0 4px; }
+.receipt-doc__header p { color: var(--gray); font-size: 12px; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+.receipt-doc__meta { margin-bottom: 18px; font-size: 14px; line-height: 1.7; }
+.receipt-doc__table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+.receipt-doc__table th, .receipt-doc__table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(0,0,0,0.08); }
+.receipt-doc__totals { max-width: 320px; margin-left: auto; font-size: 14px; }
+.receipt-doc__totals p { display: flex; justify-content: space-between; padding: 4px 0; }
+.receipt-doc__total { font-weight: 600; font-size: 17px; border-top: 1px solid rgba(0,0,0,0.15); margin-top: 8px; padding-top: 10px !important; }
+@media print {
+  .header, .footer, #cartToggle, #searchToggle, #receiptPrintBtn { display: none !important; }
+  .receipt-page { padding: 0; }
+  .receipt-doc { border: none; padding: 0; }
+}
+
+/* ===========================
+   Compose Pack — premium intro animation
+=========================== */
+.compose-intro {
+  position: fixed; inset: 0; z-index: 300; background: var(--black);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1; transition: opacity 0.45s ease;
+}
+.compose-intro.is-fading { opacity: 0; }
+.compose-intro__line {
+  position: absolute; color: var(--white); text-align: center;
+  opacity: 0; transform: translateY(14px); transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.compose-intro__line.is-visible { opacity: 1; transform: translateY(0); }
+.compose-intro__line.is-leaving { opacity: 0; transform: translateY(-14px); }
+.compose-intro__line--welcome { font-family: var(--serif); font-size: clamp(20px, 4vw, 34px); letter-spacing: 0.04em; }
+.compose-intro__line--mark { font-family: var(--serif); font-size: clamp(48px, 10vw, 96px); letter-spacing: 0.12em; color: var(--gold); }
+
+/* ===========================
    Compose Pack — dedicated pages
 =========================== */
 .compose-page { padding: 130px 0 160px; }
@@ -1143,6 +1187,22 @@ em { font-style: italic; color: var(--gold); }
 =========================== */
 .review-customer { font-size: 13px; line-height: 1.7; margin-bottom: 14px; color: #333; }
 .review-customer p:first-child { font-weight: 600; color: var(--black); }
+
+/* ===========================
+   Product reviews
+=========================== */
+.product-reviews { margin-top: 40px; padding-top: 30px; border-top: 1px solid rgba(0,0,0,0.08); grid-column: 1 / -1; }
+.product-reviews__header h3 { font-family: var(--serif); font-size: 20px; margin-bottom: 6px; }
+.product-reviews__header p { display: flex; align-items: center; gap: 10px; color: var(--gray); font-size: 13px; margin-bottom: 18px; }
+.review-stars { color: var(--gold); letter-spacing: 1px; }
+.review-item { padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.review-item .review-customer { margin: 6px 0; }
+.product-reviews__submit { margin-top: 20px; }
+.product-reviews__submit summary { cursor: pointer; font-size: 13px; color: var(--gold); text-decoration: underline; margin-bottom: 14px; }
+.product-reviews__submit .review-form { max-width: 480px; }
+.review-form__msg { font-size: 13px; margin: 10px 0; }
+.review-form__msg--ok { color: #2f7a45; }
+.review-form__msg--error { color: #a13333; }
 
 /* ===========================
    Contact page

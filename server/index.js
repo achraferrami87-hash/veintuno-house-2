@@ -20,6 +20,8 @@ const adminUploadRoutes = require('./routes/adminUpload');
 const adminNavRoutes = require('./routes/adminNav');
 const adminLoyaltyRoutes = require('./routes/adminLoyalty');
 const adminSettingsRoutes = require('./routes/adminSettings');
+const adminBundlesRoutes = require('./routes/adminBundles');
+const adminReviewsRoutes = require('./routes/adminReviews');
 
 const app = express();
 
@@ -64,6 +66,8 @@ app.use('/api/admin/upload', requireAdmin, adminUploadRoutes);
 app.use('/api/admin/nav-menu', requireAdmin, adminNavRoutes);
 app.use('/api/admin/loyalty', requireAdmin, adminLoyaltyRoutes);
 app.use('/api/admin/settings', requireAdmin, adminSettingsRoutes);
+app.use('/api/admin/bundles', requireAdmin, adminBundlesRoutes);
+app.use('/api/admin/reviews', requireAdmin, adminReviewsRoutes);
 
 // ---------- Static files ----------
 // Uploaded media: filenames are unique per upload, but we still force

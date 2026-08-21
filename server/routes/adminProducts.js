@@ -25,12 +25,19 @@ async function uniqueSlug(base, ignoreId) {
   }
 }
 
+function withGendersArray(product) {
+  let genders = [];
+  try { genders = JSON.parse(product.genders || '[]'); } catch (e) { genders = []; }
+  if (genders.length === 0 && product.gender) genders = [product.gender];
+  return { ...product, genders };
+}
+
 router.get('/', async (req, res) => {
   const products = await prisma.product.findMany({
     include: { collection: true },
     orderBy: [{ collectionId: 'asc' }, { position: 'asc' }],
   });
-  res.json(products);
+  res.json(products.map(withGendersArray));
 });
 
 router.get('/:id', async (req, res) => {
@@ -39,7 +46,7 @@ router.get('/:id', async (req, res) => {
     include: { collection: true, packProducts: true, freePackProducts: true },
   });
   if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
-  res.json(product);
+  res.json(withGendersArray(product));
 });
 
 router.post('/', async (req, res) => {
@@ -57,7 +64,8 @@ router.post('/', async (req, res) => {
       notesTop: body.notesTop || null,
       notesHeart: body.notesHeart || null,
       notesBase: body.notesBase || null,
-      gender: body.gender || null,
+      gender: Array.isArray(body.genders) && body.genders.length ? body.genders[0] : (body.gender || null),
+      genders: JSON.stringify(Array.isArray(body.genders) ? body.genders : (body.gender ? [body.gender] : [])),
       volume: body.volume || null,
       price: Number(body.price),
       stock: Number(body.stock) || 0,
@@ -84,7 +92,13 @@ router.put('/:id', async (req, res) => {
   const data = {};
   const fields = ['name', 'description', 'notes', 'notesTop', 'notesHeart', 'notesBase', 'videoUrl', 'shape', 'color', 'collectionId'];
   fields.forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
-  if (body.gender !== undefined) data.gender = body.gender || null;
+  if (body.genders !== undefined) {
+    const gArr = Array.isArray(body.genders) ? body.genders : [];
+    data.genders = JSON.stringify(gArr);
+    data.gender = gArr.length ? gArr[0] : null;
+  } else if (body.gender !== undefined) {
+    data.gender = body.gender || null;
+  }
   if (body.volume !== undefined) data.volume = body.volume || null;
   const numFields = ['price', 'stock', 'lowStockThreshold', 'position'];
   numFields.forEach((f) => { if (body[f] !== undefined) data[f] = Number(body[f]); });

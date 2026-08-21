@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bundles — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Bundles</h1>
+        <p>Créez des offres groupées à prix fixe, indépendantes du système de Packs.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newBundleBtn">+ Nouveau bundle</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th></th><th>Bundle</th><th>Contenu</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="bundlesBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let bundles = [];
+let products = [];
+
+function bundleRowHTML(b) {
+  const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  return `
+    <tr data-id="${b.id}">
+      <td>${b.image ? `<img src="${b.image}" style="width:48px;height:48px;object-fit:contain;border-radius:6px;">` : ''}</td>
+      <td><strong>${b.name}</strong></td>
+      <td style="max-width:340px;">${content}</td>
+      <td>${b.price} MAD</td>
+      <td>${b.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="duplicate">Dupliquer</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  [bundles, products] = await Promise.all([adminApi('/bundles'), adminApi('/products')]);
+  document.getElementById('bundlesBody').innerHTML = bundles.map(bundleRowHTML).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);">Aucun bundle pour le moment.</td></tr>';
+}
+
+document.getElementById('bundlesBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const bundle = bundles.find((b) => b.id === id);
+  if (btn.dataset.action === 'edit') openBundleModal(bundle);
+  if (btn.dataset.action === 'duplicate') { await adminApi(`/bundles/${id}/duplicate`, { method: 'POST' }); toast('Bundle dupliqué.'); await loadAll(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer le bundle "${bundle.name}" ?`);
+    if (!ok) return;
+    try { await adminApi(`/bundles/${id}`, { method: 'DELETE' }); toast('Bundle supprimé.'); await loadAll(); }
+    catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newBundleBtn').addEventListener('click', () => openBundleModal(null));
+
+function openBundleModal(bundle) {
+  const isEdit = !!bundle;
+  const selectedQty = new Map((isEdit ? bundle.items : []).map((it) => [it.productId, it.quantity]));
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier le bundle' : 'Nouveau bundle'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="bundleForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Nom</label><input name="name" required value="${isEdit ? bundle.name : ''}"></div>
+          <div class="admin-field"><label>Prix fixe (MAD)</label><input type="number" step="0.01" name="price" required value="${isEdit ? bundle.price : ''}"></div>
+        </div>
+        <div class="admin-field"><label>Description</label><textarea name="description" rows="2">${isEdit && bundle.description ? bundle.description : ''}</textarea></div>
+        <div class="admin-field"><label>URL image (optionnel — utilisez la page Produits pour uploader puis collez l'URL ici)</label><input name="image" value="${isEdit && bundle.image ? bundle.image : ''}"></div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || bundle.isActive ? 'checked' : ''}> Actif</label>
+        <div class="admin-field">
+          <label>Produits inclus et quantités</label>
+          <div id="bundleItemsList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+            ${products.map((p) => `
+              <label class="admin-checkbox" style="justify-content:space-between;">
+                <span><input type="checkbox" class="bundle-item-check" value="${p.id}" ${selectedQty.has(p.id) ? 'checked' : ''}> ${p.name}</span>
+                <input type="number" min="1" class="bundle-item-qty" data-for="${p.id}" value="${selectedQty.get(p.id) || 1}" style="width:60px;">
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('bundleForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const items = Array.from(document.querySelectorAll('.bundle-item-check:checked')).map((el) => ({
+      productId: el.value,
+      quantity: Number(document.querySelector(`.bundle-item-qty[data-for="${el.value}"]`).value) || 1,
+    }));
+    if (items.length === 0) { toast('Sélectionnez au moins un produit.', 'error'); return; }
+    const payload = {
+      name: fd.get('name'), price: fd.get('price'), description: fd.get('description') || null,
+      image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', items,
+    };
+    try {
+      if (isEdit) await adminApi(`/bundles/${bundle.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/bundles', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Bundle mis à jour.' : 'Bundle créé.');
+      overlay.remove(); await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('bundles.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

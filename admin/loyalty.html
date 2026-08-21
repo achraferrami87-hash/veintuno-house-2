@@ -41,6 +41,25 @@
       <div id="rewardsList" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
+    <div class="admin-card" style="margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-family:var(--serif);font-size:19px;">Demandes "Réclamer vos points"</h2>
+        <select id="requestStatusFilter">
+          <option value="">Tous les statuts</option>
+          <option value="PENDING">En attente</option>
+          <option value="CONTACTED">Contacté</option>
+          <option value="COMPLETED">Terminé</option>
+          <option value="REJECTED">Rejeté</option>
+        </select>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Client</th><th>Téléphone</th><th>Points au moment de la demande</th><th>Récompense demandée</th><th>Date</th><th>Statut</th></tr></thead>
+          <tbody id="requestsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="admin-card">
       <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:16px;">Clients &amp; historique</h2>
       <div class="admin-toolbar"><input type="search" id="searchInput" placeholder="Rechercher un client (nom ou téléphone)..."></div>
@@ -281,10 +300,49 @@ async function openCustomerModal(id) {
   });
 }
 
+function requestStatusBadge(s) {
+  if (s === 'COMPLETED') return '<span class="badge badge--green">Terminé</span>';
+  if (s === 'CONTACTED') return '<span class="badge badge--gold">Contacté</span>';
+  if (s === 'REJECTED') return '<span class="badge badge--gray">Rejeté</span>';
+  return '<span class="badge badge--gold">En attente</span>';
+}
+
+function requestRowHTML(r) {
+  return `
+    <tr data-id="${r.id}">
+      <td>${r.fullName}</td>
+      <td>${r.phone}</td>
+      <td>${r.pointsAtRequest}</td>
+      <td>${r.requestedRewardName || '—'}</td>
+      <td>${formatDate(r.createdAt)}</td>
+      <td>
+        <select class="request-status-select" data-id="${r.id}">
+          ${['PENDING', 'CONTACTED', 'COMPLETED', 'REJECTED'].map((s) => `<option value="${s}" ${r.status === s ? 'selected' : ''}>${s === 'PENDING' ? 'En attente' : s === 'CONTACTED' ? 'Contacté' : s === 'COMPLETED' ? 'Terminé' : 'Rejeté'}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+}
+
+async function loadRequests() {
+  const status = document.getElementById('requestStatusFilter').value;
+  const requests = await adminApi(`/loyalty/redemption-requests${status ? `?status=${status}` : ''}`);
+  document.getElementById('requestsBody').innerHTML = requests.map(requestRowHTML).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);">Aucune demande pour le moment.</td></tr>';
+}
+
+document.getElementById('requestStatusFilter').addEventListener('change', loadRequests);
+document.getElementById('requestsBody').addEventListener('change', async (e) => {
+  const select = e.target.closest('.request-status-select');
+  if (!select) return;
+  try {
+    await adminApi(`/loyalty/redemption-requests/${select.dataset.id}`, { method: 'PUT', body: JSON.stringify({ status: select.value }) });
+    toast('Statut mis à jour.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
 (async () => {
   const admin = await initAdminPage('loyalty.html');
   if (!admin) return;
-  await Promise.all([loadOverview(), loadSettings(), loadRewards(), loadCustomers()]);
+  await Promise.all([loadOverview(), loadSettings(), loadRewards(), loadCustomers(), loadRequests()]);
   makeSortable(document.getElementById('rewardsList'), async (orderedIds) => {
     await adminApi('/loyalty/rewards/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
     toast('Ordre mis à jour.'); await loadRewards();

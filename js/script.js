@@ -195,15 +195,24 @@ const Cart = (() => {
     return items.map((i) => {
       if (i.kind === 'PRODUCT') return { kind: 'PRODUCT', productSlug: i.productSlug, quantity: i.quantity };
       if (i.kind === 'PACK') return { kind: 'PACK', packId: i.packId, componentSlugs: i.componentSlugs, quantity: i.quantity };
+      if (i.kind === 'BUNDLE') return { kind: 'BUNDLE', bundleId: i.bundleId, quantity: i.quantity };
       return { kind: 'FREE_PACK', componentSlugs: i.componentSlugs, quantity: i.quantity };
     });
+  }
+
+  // Turns a (possibly repeated) list of names into "Atlas Noir ×2, Minuit Cuir"
+  // instead of listing the same name once per repeat.
+  function summarizeNames(names) {
+    const counts = new Map();
+    names.forEach((n) => counts.set(n, (counts.get(n) || 0) + 1));
+    return Array.from(counts.entries()).map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(', ');
   }
 
   function addPack(packId, packName, packPrice, componentSlugs, componentNames) {
     items.push({
       uid: 'pack-' + Date.now(), kind: 'PACK', packId, name: packName,
       unitPrice: Number(packPrice), quantity: 1, componentSlugs,
-      detail: `${componentSlugs.length} produits — ${componentNames.join(', ')}`,
+      detail: `${componentSlugs.length} produits — ${summarizeNames(componentNames)}`,
     });
     clearPromo(); persist(); renderAll();
   }
@@ -212,9 +221,18 @@ const Cart = (() => {
     items.push({
       uid: 'freepack-' + Date.now(), kind: 'FREE_PACK', name: freePackName,
       unitPrice, quantity: 1, componentSlugs,
-      detail: componentNames.join(', '),
+      detail: summarizeNames(componentNames),
     });
     clearPromo(); persist(); renderAll();
+  }
+
+  function addBundle(bundleId, bundleName, bundlePrice, detail) {
+    items.push({
+      uid: 'bundle-' + Date.now(), kind: 'BUNDLE', bundleId, name: bundleName,
+      unitPrice: Number(bundlePrice), quantity: 1, detail,
+    });
+    clearPromo(); persist(); renderAll();
+    pulseBadge();
   }
 
   function addProduct(product) {
@@ -412,6 +430,8 @@ const Cart = (() => {
 
       successNameEl.textContent = pendingCustomer.fullName;
       successOrderNumberEl.textContent = result.orderNumber;
+      const receiptLink = document.getElementById('successReceiptLink');
+      if (receiptLink) receiptLink.href = `#receipt/${encodeURIComponent(result.orderNumber)}/${encodeURIComponent(pendingCustomer.phone)}`;
       successListEl.innerHTML = '';
       items.forEach((item) => {
         const li = document.createElement('li');
@@ -444,10 +464,12 @@ const Cart = (() => {
   });
 
   document.getElementById('cartContinueShopping').addEventListener('click', close);
+  const receiptLinkEl = document.getElementById('successReceiptLink');
+  if (receiptLinkEl) receiptLinkEl.addEventListener('click', close);
 
   renderAll();
 
-  return { addPack, addFreePack, addProduct, open, close };
+  return { addPack, addFreePack, addBundle, addProduct, open, close };
 })();
 
 document.addEventListener('click', async (e) => {
@@ -461,6 +483,15 @@ document.addEventListener('click', async (e) => {
     btn.textContent = 'Ajouté ✓';
     setTimeout(() => { btn.textContent = original; }, 1400);
   } catch (err) { /* product unavailable */ }
+});
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.js-add-bundle');
+  if (!btn || !Cart) return;
+  Cart.addBundle(btn.dataset.id, btn.dataset.name, btn.dataset.price, btn.dataset.detail);
+  const original = btn.textContent;
+  btn.textContent = 'Ajouté ✓';
+  setTimeout(() => { btn.textContent = original; }, 1400);
 });
 
 // ===========================
@@ -620,6 +651,32 @@ function testimonialsSectionHTML(section) {
     </section>`;
 }
 
+function bundleCardHTML(b) {
+  const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  return `
+    <article class="product-card reveal">
+      <span class="product-card__tag product-card__tag--gold">Bundle</span>
+      <div class="product-card__bottle">${b.image ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
+      <h3>${b.name}</h3>
+      <p class="product-card__notes">${content}</p>
+      <p class="product-card__price">${b.price} MAD</p>
+      <button type="button" class="btn btn--outline product-card__cta js-add-bundle" data-id="${b.id}" data-name="${b.name}" data-price="${b.price}" data-detail="${content.replace(/"/g, '&quot;')}">Ajouter au panier</button>
+    </article>`;
+}
+
+function bundlesSectionHTML(section) {
+  const bundles = section.config.bundles || [];
+  if (bundles.length === 0) return '';
+  return `
+    <section class="products">
+      <div class="container">
+        <p class="section__eyebrow">${section.title || 'Offres groupées'}</p>
+        <h2 class="section__title">${section.subtitle || 'Nos Bundles'}</h2>
+        <div class="products__grid">${bundles.map(bundleCardHTML).join('')}</div>
+      </div>
+    </section>`;
+}
+
 function promoBannerSectionHTML(section) {
   return `
     <section class="promo-banner">
@@ -634,6 +691,7 @@ const SECTION_RENDERERS = {
   FEATURED_PRODUCTS: productsSectionHTML,
   BEST_SELLERS: productsSectionHTML,
   NEW_ARRIVALS: productsSectionHTML,
+  BUNDLES: bundlesSectionHTML,
   TEXT_IMAGE: textImageSectionHTML,
   TESTIMONIALS: testimonialsSectionHTML,
   PROMO_BANNER: promoBannerSectionHTML,
@@ -685,7 +743,41 @@ function composeProgressHTML(count, total, unit) {
     </div>`;
 }
 
+// Plays once per browser session — a returning visitor jumping between pack
+// sizes shouldn't have to sit through the intro every single time.
+function playComposeIntro(container) {
+  return new Promise((resolve) => {
+    if (sessionStorage.getItem('veintuno_compose_intro_seen')) { resolve(); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'compose-intro';
+    overlay.innerHTML = `<p class="compose-intro__line compose-intro__line--welcome">Bienvenue chez VEINTUNO HOUSE</p><p class="compose-intro__line compose-intro__line--mark" hidden>XXI</p>`;
+    container.innerHTML = '';
+    container.appendChild(overlay);
+    const welcomeEl = overlay.querySelector('.compose-intro__line--welcome');
+    const markEl = overlay.querySelector('.compose-intro__line--mark');
+    requestAnimationFrame(() => welcomeEl.classList.add('is-visible'));
+    setTimeout(() => {
+      welcomeEl.classList.remove('is-visible');
+      welcomeEl.classList.add('is-leaving');
+    }, 1400);
+    setTimeout(() => {
+      welcomeEl.hidden = true;
+      markEl.hidden = false;
+      requestAnimationFrame(() => markEl.classList.add('is-visible'));
+    }, 1750);
+    setTimeout(() => {
+      overlay.classList.add('is-fading');
+    }, 2600);
+    setTimeout(() => {
+      sessionStorage.setItem('veintuno_compose_intro_seen', '1');
+      overlay.remove();
+      resolve();
+    }, 3050);
+  });
+}
+
 async function renderComposeFormula(container) {
+  await playComposeIntro(container);
   container.innerHTML = `
     <a href="#accueil" class="collection-detail__back">← Retour à l'accueil</a>
     <p class="section__eyebrow">Composer mon pack</p>
@@ -751,23 +843,31 @@ async function renderComposePack(container, packId) {
   if (!pack) { container.innerHTML = '<p class="admin-field-help">Pack introuvable.</p>'; return; }
   cacheProducts(pack.eligibleProducts);
 
-  const selected = []; // {slug, name}
+  // Quantities per slug — a customer can pick the same perfume several times
+  // (e.g. Atlas Noir ×2, Minuit Cuir ×1) as long as the total equals pack.size.
+  const quantities = new Map(); // slug -> count
+  const totalSelected = () => Array.from(quantities.values()).reduce((s, n) => s + n, 0);
 
   function cardsGridHTML() {
     return pack.eligibleProducts.map((p) => `
-      <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}">
-        <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div class="fragrance-card fragrance-card--stepper" data-slug="${p.slug}" data-name="${p.name}">
         ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
         <div class="product-card__bottle">${productMediaHTML(p)}</div>
         <h3>${p.name}</h3>
         <p class="product-card__notes">${p.notes || ''}</p>
-      </button>`).join('');
+        <div class="fragrance-card__qty qty-selector">
+          <button type="button" class="qty-minus" data-slug="${p.slug}" aria-label="Retirer">−</button>
+          <span class="fragrance-card__qty-value" data-slug="${p.slug}">0</span>
+          <button type="button" class="qty-plus" data-slug="${p.slug}" aria-label="Ajouter">+</button>
+        </div>
+      </div>`).join('');
   }
 
   container.innerHTML = `
     <a href="#compose/size/${pack.size}" class="collection-detail__back">← Changer de collection</a>
     <p class="section__eyebrow">Composez votre ${pack.name}</p>
     <h2 class="section__title">${pack.name}</h2>
+    <p class="admin-field-help" style="margin-top:-12px;margin-bottom:20px;">Vous pouvez sélectionner plusieurs fois le même parfum.</p>
     <div id="composePackProgress"></div>
     <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
     <div class="compose-success" id="composePackSuccess" hidden></div>
@@ -785,57 +885,76 @@ async function renderComposePack(container, packId) {
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
 
   function updateUI() {
-    progressEl.innerHTML = composeProgressHTML(selected.length, pack.size, 'parfum(s)');
-    const isFull = selected.length >= pack.size;
+    const total = totalSelected();
+    progressEl.innerHTML = composeProgressHTML(total, pack.size, 'parfum(s)');
+    const isFull = total >= pack.size;
     cards.forEach((card) => {
-      const isSelected = card.classList.contains('is-selected');
-      card.classList.toggle('is-disabled', isFull && !isSelected);
+      const slug = card.dataset.slug;
+      const qty = quantities.get(slug) || 0;
+      card.querySelector('.fragrance-card__qty-value').textContent = qty;
+      card.classList.toggle('is-selected', qty > 0);
+      const plusBtn = card.querySelector('.qty-plus');
+      plusBtn.disabled = isFull;
+      const minusBtn = card.querySelector('.qty-minus');
+      minusBtn.disabled = qty === 0;
     });
     recap.innerHTML = '';
-    if (selected.length === 0) {
+    if (total === 0) {
       recap.innerHTML = '<span class="pack-modal__recap-empty">Aucun parfum sélectionné</span>';
     } else {
-      selected.forEach((item) => {
+      cards.forEach((card) => {
+        const slug = card.dataset.slug;
+        const qty = quantities.get(slug) || 0;
+        if (qty === 0) return;
         const chip = document.createElement('span'); chip.className = 'pack-modal__chip';
-        const label = document.createElement('span'); label.textContent = item.name;
+        const label = document.createElement('span'); label.textContent = qty > 1 ? `${card.dataset.name} ×${qty}` : card.dataset.name;
         const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', () => toggleCard(item.slug));
+        removeBtn.addEventListener('click', () => setQty(slug, 0));
         chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
       });
     }
-    cta.disabled = selected.length !== pack.size;
+    cta.disabled = total !== pack.size;
     cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${pack.price} MAD`;
   }
 
-  function toggleCard(slug) {
-    const card = cards.find((c) => c.dataset.slug === slug);
-    if (!card) return;
-    const isSelected = card.classList.contains('is-selected');
-    if (isSelected) {
-      card.classList.remove('is-selected');
-      const idx = selected.findIndex((s) => s.slug === slug);
-      if (idx > -1) selected.splice(idx, 1);
-    } else {
-      if (selected.length >= pack.size) {
-        card.classList.add('is-shaking');
-        setTimeout(() => card.classList.remove('is-shaking'), 400);
-        return;
-      }
-      card.classList.add('is-selected');
-      selected.push({ slug, name: card.dataset.name });
-    }
+  function setQty(slug, qty) {
+    if (qty <= 0) quantities.delete(slug);
+    else quantities.set(slug, qty);
     updateUI();
   }
 
-  cards.forEach((card) => card.addEventListener('click', () => toggleCard(card.dataset.slug)));
+  function changeQty(slug, delta) {
+    const card = cards.find((c) => c.dataset.slug === slug);
+    const current = quantities.get(slug) || 0;
+    if (delta > 0 && totalSelected() >= pack.size) {
+      card.classList.add('is-shaking');
+      setTimeout(() => card.classList.remove('is-shaking'), 400);
+      return;
+    }
+    setQty(slug, Math.max(0, current + delta));
+  }
+
+  grid.addEventListener('click', (e) => {
+    const plusBtn = e.target.closest('.qty-plus');
+    const minusBtn = e.target.closest('.qty-minus');
+    if (plusBtn) changeQty(plusBtn.dataset.slug, 1);
+    if (minusBtn) changeQty(minusBtn.dataset.slug, -1);
+  });
 
   cta.addEventListener('click', () => {
     if (cta.disabled) return;
-    Cart.addPack(pack.id, pack.name, pack.price, selected.map((s) => s.slug), selected.map((s) => s.name));
+    const slugs = [];
+    const names = [];
+    cards.forEach((card) => {
+      const slug = card.dataset.slug;
+      const qty = quantities.get(slug) || 0;
+      for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); }
+    });
+    Cart.addPack(pack.id, pack.name, pack.price, slugs, names);
     grid.hidden = true;
     bar.hidden = true;
     successPane.hidden = false;
-    successPane.innerHTML = composeSuccessHTML(pack.name, selected.map((s) => s.name));
+    successPane.innerHTML = composeSuccessHTML(pack.name, names);
     wireComposeSuccessActions(successPane);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -855,6 +974,7 @@ async function renderComposeFree(container) {
     <a href="#compose" class="collection-detail__back">← Changer de formule</a>
     <p class="section__eyebrow">${config.name}</p>
     <h2 class="section__title">Choisissez vos produits</h2>
+    <p class="admin-field-help" id="composeFreePriceHint" style="margin-bottom:14px;">Atteignez ${config.priceThreshold} MAD de produits pour bénéficier du prix fixe à ${config.flatPrice} MAD.</p>
     <div id="composeFreeProgress"></div>
     <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
       ${config.eligibleProducts.map((p) => `
@@ -878,6 +998,7 @@ async function renderComposeFree(container) {
   const cta = document.getElementById('composeFreeCta');
   const successPane = document.getElementById('composeFreeSuccess');
   const bar = document.getElementById('composeFreeBar');
+  const priceHint = document.getElementById('composeFreePriceHint');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
 
   function updateUI() {
@@ -903,9 +1024,21 @@ async function renderComposeFree(container) {
         chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
       });
     }
-    const total = selected.reduce((s, i) => s + i.price, 0);
+    const rawTotal = selected.reduce((s, i) => s + i.price, 0);
+    const price = computeFreePackPrice(rawTotal);
     cta.disabled = selected.length < config.minItems;
-    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${total} MAD`;
+    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${price} MAD`;
+    if (priceHint) {
+      priceHint.textContent = rawTotal >= config.priceThreshold
+        ? `Prix fixe ${config.flatPrice} MAD appliqué (au lieu de ${rawTotal} MAD) — seuil de ${config.priceThreshold} MAD atteint.`
+        : `Ajoutez encore ${(config.priceThreshold - rawTotal).toFixed(2)} MAD de produits pour bénéficier du prix fixe à ${config.flatPrice} MAD.`;
+    }
+  }
+
+  // Mirrors the server's threshold rule in resolveItemsPricing (public.js):
+  // below the threshold, normal individual pricing applies — no discount.
+  function computeFreePackPrice(rawTotal) {
+    return rawTotal >= config.priceThreshold ? config.flatPrice : rawTotal;
   }
 
   function toggleCard(slug) {
@@ -928,8 +1061,9 @@ async function renderComposeFree(container) {
 
   cta.addEventListener('click', () => {
     if (cta.disabled) return;
-    const total = selected.reduce((s, i) => s + i.price, 0);
-    Cart.addFreePack(config.name, total, selected.map((s) => s.slug), selected.map((s) => s.name));
+    const rawTotal = selected.reduce((s, i) => s + i.price, 0);
+    const price = computeFreePackPrice(rawTotal);
+    Cart.addFreePack(config.name, price, selected.map((s) => s.slug), selected.map((s) => s.name));
     grid.hidden = true;
     bar.hidden = true;
     successPane.hidden = false;
@@ -958,6 +1092,73 @@ function composeSuccessHTML(name, itemNames) {
 function wireComposeSuccessActions(scope) {
   const btn = scope.querySelector('.js-compose-view-cart');
   if (btn) btn.addEventListener('click', () => Cart.open('bag'));
+}
+
+// ===========================
+// ORDER RECEIPT (phone-protected: order number + phone must match)
+// ===========================
+async function renderReceipt(container, orderNumber, phone) {
+  if (!orderNumber || !phone) {
+    container.innerHTML = `
+      <p class="section__eyebrow">Reçu de commande</p>
+      <h2 class="section__title">Retrouvez votre reçu</h2>
+      <form class="admin-form" id="receiptGateForm" style="max-width:420px;">
+        <div class="admin-field"><label>Numéro de commande</label><input name="orderNumber" required value="${orderNumber || ''}"></div>
+        <div class="admin-field"><label>Téléphone utilisé lors de la commande</label><input name="phone" required></div>
+        <button type="submit" class="btn btn--gold">Afficher le reçu</button>
+      </form>`;
+    document.getElementById('receiptGateForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      window.location.hash = `#receipt/${encodeURIComponent(fd.get('orderNumber').trim())}/${encodeURIComponent(fd.get('phone').trim())}`;
+    });
+    return;
+  }
+
+  container.innerHTML = '<p class="admin-field-help">Chargement du reçu...</p>';
+  let receipt;
+  try {
+    receipt = await api(`/orders/${encodeURIComponent(orderNumber)}/receipt?phone=${encodeURIComponent(phone)}`);
+  } catch (e) {
+    container.innerHTML = `<p class="admin-field-help">Reçu introuvable pour ces informations.</p><a href="#receipt" class="btn btn--outline">Réessayer</a>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="receipt-doc" id="receiptDoc">
+      <div class="receipt-doc__header">
+        <div class="logo">XXI<span>VEINTUNO</span> HOUSE</div>
+        <p>Reçu de commande</p>
+      </div>
+      <div class="receipt-doc__meta">
+        <p><strong>Commande</strong> ${receipt.orderNumber}</p>
+        <p><strong>Date</strong> ${new Date(receipt.createdAt).toLocaleDateString('fr-FR')}</p>
+        <p><strong>Statut</strong> ${receipt.status}</p>
+      </div>
+      <div class="receipt-doc__meta">
+        <p><strong>${receipt.fullName}</strong></p>
+        <p>${receipt.address}, ${receipt.city}</p>
+        <p>${receipt.phone}</p>
+      </div>
+      <table class="receipt-doc__table">
+        <thead><tr><th>Article</th><th>Détail</th><th>Qté</th><th>Prix</th></tr></thead>
+        <tbody>
+          ${receipt.items.map((it) => `
+            <tr><td>${it.name}</td><td>${it.detail || ''}</td><td>${it.quantity}</td><td>${it.unitPrice * it.quantity} MAD</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="receipt-doc__totals">
+        <p><span>Sous-total</span><span>${receipt.subtotal} MAD</span></p>
+        ${receipt.discountAmount > 0 ? `<p><span>Réduction${receipt.promoCode ? ` (${receipt.promoCode})` : ''}</span><span>-${receipt.discountAmount} MAD</span></p>` : ''}
+        ${receipt.deliveryFee > 0 ? `<p><span>Livraison</span><span>${receipt.deliveryFee} MAD</span></p>` : ''}
+        ${receipt.pointsEarned > 0 ? `<p><span>Points fidélité gagnés</span><span>+${receipt.pointsEarned}</span></p>` : ''}
+        ${receipt.pointsRedeemed > 0 ? `<p><span>Points fidélité utilisés</span><span>-${receipt.pointsRedeemed}</span></p>` : ''}
+        <p class="receipt-doc__total"><span>Total</span><span>${receipt.total} MAD</span></p>
+      </div>
+    </div>
+    <button type="button" class="btn btn--gold" id="receiptPrintBtn">Imprimer / Télécharger (PDF)</button>`;
+
+  document.getElementById('receiptPrintBtn').addEventListener('click', () => window.print());
 }
 
 // ===========================
@@ -1045,7 +1246,85 @@ function productDetailBodyHTML(p, compact) {
         </div>
         <button type="button" class="btn btn--gold js-detail-add" data-slug="${p.slug}" ${p.stock <= 0 ? 'disabled' : ''}>Ajouter au panier</button>
       </div>
+      ${!compact ? `<div class="product-reviews" id="productReviews-${p.slug}"><p class="admin-field-help">Chargement des avis...</p></div>` : ''}
     </div>`;
+}
+
+// ===========================
+// REVIEWS (customer-facing: display approved + submission form)
+// ===========================
+function starsHTML(rating) {
+  return `<span class="review-stars">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>`;
+}
+
+async function loadProductReviews(container, slug) {
+  if (!container) return;
+  let data;
+  try { data = await api(`/products/${slug}/reviews`); } catch (e) { data = { reviews: [], avgRating: 0, count: 0 }; }
+
+  container.innerHTML = `
+    <div class="product-reviews__header">
+      <h3>Avis clients</h3>
+      ${data.count > 0 ? `<p>${starsHTML(Math.round(data.avgRating))} <span>${data.avgRating.toFixed(1)}/5 — ${data.count} avis</span></p>` : '<p class="admin-field-help">Aucun avis pour le moment.</p>'}
+    </div>
+    <div class="product-reviews__list">
+      ${data.reviews.map((r) => `
+        <div class="review-item">
+          ${starsHTML(r.rating)}
+          <p class="review-customer">${r.customerName || 'Client VEINTUNO'} — ${new Date(r.date).toLocaleDateString('fr-FR')}</p>
+          ${r.text ? `<p>${r.text}</p>` : ''}
+        </div>`).join('')}
+    </div>
+    <details class="product-reviews__submit">
+      <summary>Laisser un avis (commande livrée requise)</summary>
+      <form class="admin-form review-form">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Numéro de commande</label><input name="orderNumber" required></div>
+          <div class="admin-field"><label>Téléphone</label><input name="phone" required></div>
+        </div>
+        <div class="admin-field">
+          <label>Note</label>
+          <select name="rating" required>
+            <option value="5">★★★★★</option>
+            <option value="4">★★★★☆</option>
+            <option value="3">★★★☆☆</option>
+            <option value="2">★★☆☆☆</option>
+            <option value="1">★☆☆☆☆</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Votre avis (optionnel)</label><textarea name="text" rows="3"></textarea></div>
+        <div class="review-form__msg" hidden></div>
+        <button type="submit" class="btn btn--gold">Envoyer mon avis</button>
+      </form>
+    </details>`;
+
+  const form = container.querySelector('.review-form');
+  const msg = container.querySelector('.review-form__msg');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    msg.hidden = true;
+    try {
+      const result = await api('/reviews', {
+        method: 'POST',
+        body: JSON.stringify({
+          productSlug: slug,
+          orderNumber: fd.get('orderNumber').toString().trim(),
+          phone: fd.get('phone').toString().trim(),
+          rating: fd.get('rating'),
+          text: fd.get('text').toString().trim() || undefined,
+        }),
+      });
+      msg.textContent = result.message;
+      msg.hidden = false;
+      msg.className = 'review-form__msg review-form__msg--ok';
+      form.reset();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.hidden = false;
+      msg.className = 'review-form__msg review-form__msg--error';
+    }
+  });
 }
 
 // Discreet, elegant "social proof" indicator — purely cosmetic, randomized
@@ -1276,11 +1555,35 @@ async function initLoyaltyPage() {
           <div class="loyalty-result__rewards">
             <h4>Récompenses accessibles</h4>
             <ul>${data.availableRewards.map((r) => `<li>${r.name} — ${r.pointsRequired} pts</li>`).join('')}</ul>
-          </div>` : ''}
+            <div class="admin-field" style="margin-top:14px;">
+              <select id="claimRewardSelect">${data.availableRewards.map((r) => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
+            </div>` : ''}
+        <button type="button" class="btn btn--gold" id="claimPointsBtn" style="margin-top:12px;">Réclamer vos points</button>
+        <p id="claimPointsMsg" class="admin-field-help" style="margin-top:10px;" hidden></p>
         <div class="loyalty-result__history">
           <h4>Historique</h4>
           <ul>${data.history.slice(0, 8).map((h) => `<li><span>${new Date(h.date).toLocaleDateString('fr-FR')}</span><span>${h.points > 0 ? '+' : ''}${h.points} pts${h.note ? ` — ${h.note}` : ''}</span></li>`).join('') || '<li>Aucun mouvement pour le moment.</li>'}</ul>
         </div>`;
+
+      const claimBtn = document.getElementById('claimPointsBtn');
+      const claimMsg = document.getElementById('claimPointsMsg');
+      claimBtn.addEventListener('click', async () => {
+        claimBtn.disabled = true;
+        try {
+          const rewardSelect = document.getElementById('claimRewardSelect');
+          const result = await api('/loyalty/redeem-request', {
+            method: 'POST',
+            body: JSON.stringify({ fullName, phone, rewardId: rewardSelect ? rewardSelect.value : undefined }),
+          });
+          claimMsg.textContent = result.message;
+          claimMsg.hidden = false;
+          claimBtn.hidden = true;
+        } catch (err) {
+          claimMsg.textContent = err.message;
+          claimMsg.hidden = false;
+          claimBtn.disabled = false;
+        }
+      });
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -1332,7 +1635,9 @@ function initRevealAnimations() {
   let currentCollectionProducts = [];
 
   function applyGenderFilter(gender) {
-    const filtered = gender ? currentCollectionProducts.filter((p) => p.gender === gender) : currentCollectionProducts;
+    const filtered = gender
+      ? currentCollectionProducts.filter((p) => Array.isArray(p.genders) && p.genders.includes(gender))
+      : currentCollectionProducts;
     detailGrid.innerHTML = filtered.map(productCardHTML).join('');
     initRevealAnimations();
   }
@@ -1415,16 +1720,27 @@ function initRevealAnimations() {
     mount.innerHTML = productDetailBodyHTML(product);
     wireProductDetailActions(mount, product);
     startVisitorCounter(mount.querySelector('.js-visitor-counter'));
+    loadProductReviews(mount.querySelector(`#productReviews-${product.slug}`), product.slug);
   }
 
   const viewCompose = document.getElementById('view-compose');
   const composeContainer = document.getElementById('composeContainer');
   const viewLoyalty = document.getElementById('view-loyalty');
   const viewContact = document.getElementById('view-contact');
-  const allViews = [viewHome, viewCollections, viewDetail, viewProduct, viewCompose, viewLoyalty, viewContact];
+  const viewReceipt = document.getElementById('view-receipt');
+  const receiptContainer = document.getElementById('receiptContainer');
+  const allViews = [viewHome, viewCollections, viewDetail, viewProduct, viewCompose, viewLoyalty, viewContact, viewReceipt];
 
   async function route() {
-    const hash = window.location.hash.replace('#', '');
+    let hash = window.location.hash.replace('#', '');
+    // Defense-in-depth: any stale link still pointing at the old modal-based
+    // pack chooser (renamed to the dedicated "compose" pages) is redirected
+    // rather than left to render a blank/broken view.
+    if (hash === 'pack-chooser' || hash.startsWith('pack-chooser/')) {
+      hash = 'compose';
+      window.location.hash = '#compose';
+      return;
+    }
     allViews.forEach((v) => { if (v) v.hidden = true; });
 
     if (hash === 'collections') {
@@ -1459,6 +1775,13 @@ function initRevealAnimations() {
       viewCompose.hidden = false;
       window.scrollTo(0, 0);
       await renderComposePack(composeContainer, packId);
+    } else if (hash === 'receipt' || hash.startsWith('receipt/')) {
+      const parts = hash.split('/');
+      const orderNumber = parts[1] ? decodeURIComponent(parts[1]) : null;
+      const phone = parts[2] ? decodeURIComponent(parts[2]) : null;
+      viewReceipt.hidden = false;
+      window.scrollTo(0, 0);
+      await renderReceipt(receiptContainer, orderNumber, phone);
     } else if (hash === 'loyalty') {
       viewLoyalty.hidden = false;
       window.scrollTo(0, 0);

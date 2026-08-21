@@ -152,14 +152,12 @@ function openProductModal(product) {
           <div class="admin-field"><label>Notes / courte description (carte produit)</label><input name="notes" value="${isEdit ? (product.notes || '') : ''}" placeholder="ex. Boisé / Ambré"></div>
           <div class="admin-field"><label>Contenance</label><input name="volume" value="${isEdit ? (product.volume || '') : ''}" placeholder="ex. 50ML"></div>
         </div>
-        <div class="admin-form__row">
-          <div class="admin-field"><label>Genre (parfums)</label>
-            <select name="gender">
-              <option value="" ${isEdit && !product.gender ? 'selected' : ''}>—</option>
-              <option value="homme" ${isEdit && product.gender === 'homme' ? 'selected' : ''}>Homme</option>
-              <option value="femme" ${isEdit && product.gender === 'femme' ? 'selected' : ''}>Femme</option>
-              <option value="unisexe" ${isEdit && product.gender === 'unisexe' ? 'selected' : ''}>Unisexe</option>
-            </select>
+        <div class="admin-field">
+          <label>Genre / catégorie (parfums) — un produit peut appartenir à plusieurs</label>
+          <div class="admin-checkbox-grid">
+            <label class="admin-checkbox"><input type="checkbox" name="genders" value="homme" ${isEdit && product.genders && product.genders.includes('homme') ? 'checked' : ''}> Homme</label>
+            <label class="admin-checkbox"><input type="checkbox" name="genders" value="femme" ${isEdit && product.genders && product.genders.includes('femme') ? 'checked' : ''}> Femme</label>
+            <label class="admin-checkbox"><input type="checkbox" name="genders" value="unisexe" ${isEdit && product.genders && product.genders.includes('unisexe') ? 'checked' : ''}> Unisexe</label>
           </div>
         </div>
         <div class="admin-field"><label>Description longue</label><textarea name="description">${isEdit ? (product.description || '') : ''}</textarea></div>
@@ -242,7 +240,7 @@ function openProductModal(product) {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
       price: fd.get('price'), stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
-      gender: fd.get('gender'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      genders: fd.getAll('genders'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
       images,
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',
