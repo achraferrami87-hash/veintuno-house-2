@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commandes — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header"><div><h1>Commandes</h1><p>Suivez et mettez à jour le statut de chaque commande.</p></div></div>
+
+    <div class="admin-tabs" id="statusTabs">
+      <div class="admin-tab is-active" data-status="">Toutes</div>
+      <div class="admin-tab" data-status="PENDING">Pending</div>
+      <div class="admin-tab" data-status="CONFIRMED">Confirmed</div>
+      <div class="admin-tab" data-status="PREPARING">Preparing</div>
+      <div class="admin-tab" data-status="SHIPPED">Shipped</div>
+      <div class="admin-tab" data-status="DELIVERED">Delivered</div>
+      <div class="admin-tab" data-status="CANCELLED">Cancelled</div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>N°</th><th>Client</th><th>Ville</th><th>Articles</th><th>Total</th><th>Date</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucune commande.</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+const STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+const STATUS_BADGE = { PENDING: 'gray', CONFIRMED: 'gold', PREPARING: 'gold', SHIPPED: 'gold', DELIVERED: 'green', CANCELLED: 'red' };
+let currentStatus = '';
+
+function rowHTML(o) {
+  return `
+    <tr data-id="${o.id}">
+      <td><strong>${o.orderNumber}</strong>${o.promoCode ? `<div style="font-size:11px;color:var(--gray);">Code: ${o.promoCode.code}</div>` : ''}</td>
+      <td>${o.fullName}<div style="font-size:11px;color:var(--gray);">${o.phone}</div></td>
+      <td>${o.city}</td>
+      <td>${o.items.length} article(s)</td>
+      <td>${formatMoney(o.total)}</td>
+      <td>${formatDate(o.createdAt)}</td>
+      <td><span class="badge badge--${STATUS_BADGE[o.status]}">${o.status}</span></td>
+      <td class="row-actions"><button data-action="view">Détails</button></td>
+    </tr>`;
+}
+
+async function loadOrders() {
+  const orders = await adminApi(`/orders${currentStatus ? `?status=${currentStatus}` : ''}`);
+  document.getElementById('ordersBody').innerHTML = orders.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = orders.length ? 'none' : 'block';
+}
+
+document.getElementById('statusTabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.admin-tab');
+  if (!tab) return;
+  document.querySelectorAll('.admin-tab').forEach((t) => t.classList.remove('is-active'));
+  tab.classList.add('is-active');
+  currentStatus = tab.dataset.status;
+  loadOrders();
+});
+
+document.getElementById('ordersBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const order = await adminApi(`/orders/${id}`);
+  openOrderModal(order);
+});
+
+function openOrderModal(order) {
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>Commande ${order.orderNumber}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <div class="admin-form__row" style="margin-bottom:18px;">
+        <div><p class="stat-card__label">Client</p><p>${order.fullName}<br>${order.phone}<br>${order.address}, ${order.city}</p></div>
+        <div>
+          <p class="stat-card__label">Statut</p>
+          <select id="statusSelect">${STATUSES.map((s) => `<option value="${s}" ${order.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="admin-table-wrap" style="margin-bottom:16px;">
+        <table class="admin-table">
+          <thead><tr><th>Article</th><th>Type</th><th>Détail</th><th>Qté</th><th>Prix</th></tr></thead>
+          <tbody>
+            ${order.items.map((i) => `<tr><td>${i.name}</td><td>${i.kind}</td><td style="font-size:12px;color:var(--gray);">${i.detail || (i.components || []).map((c) => c.name).join(', ')}</td><td>${i.quantity}</td><td>${i.unitPrice} MAD</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="text-align:right;font-size:14px;">
+        <p>Sous-total : ${formatMoney(order.subtotal)}</p>
+        ${order.discountAmount ? `<p>Réduction${order.promoCode ? ` (${order.promoCode.code})` : ''} : -${formatMoney(order.discountAmount)}</p>` : ''}
+        ${order.deliveryFee ? `<p>Livraison : ${formatMoney(order.deliveryFee)}</p>` : ''}
+        <p style="font-family:var(--serif);font-size:18px;font-weight:600;margin-top:6px;">Total : ${formatMoney(order.total)}</p>
+      </div>
+      <div class="admin-modal__actions">
+        <button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button>
+        <button type="button" class="admin-btn admin-btn--gold" id="saveStatusBtn">Mettre à jour le statut</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('saveStatusBtn').addEventListener('click', async () => {
+    const status = document.getElementById('statusSelect').value;
+    try {
+      await adminApi(`/orders/${order.id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+      toast('Statut mis à jour.');
+      overlay.remove();
+      await loadOrders();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('orders.html');
+  if (!admin) return;
+  await loadOrders();
+})();
+</script>
+</body>
+</html>

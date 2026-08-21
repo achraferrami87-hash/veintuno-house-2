@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>VEINTUNO HOUSE Admin</title>
+<script>
+fetch('/api/admin/me', { credentials: 'include' })
+  .then((res) => { location.href = res.ok ? '/admin/dashboard.html' : '/admin/login.html'; })
+  .catch(() => { location.href = '/admin/login.html'; });
+</script>
+</head>
+<body></body>
+</html>

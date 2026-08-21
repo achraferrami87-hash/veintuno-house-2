@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Navbar — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div><h1>Navigation</h1><p>Gérez les liens du menu principal. "Accueil" et le menu déroulant "Collections" sont automatiques et reflètent toujours vos collections actives.</p></div>
+      <div class="admin-header__actions"><button type="button" class="admin-btn admin-btn--gold" id="newItemBtn">+ Ajouter un lien</button></div>
+    </div>
+    <div id="itemsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+  </main>
+</div>
+<style>
+.editor-row { display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--white); }
+.editor-row__body { flex:1; }
+</style>
+<script src="js/admin-shared.js"></script>
+<script>
+let items = [];
+
+function rowHTML(i) {
+  return `
+    <div class="editor-row" data-sortable-id="${i.id}" data-id="${i.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="editor-row__body"><strong>${i.label}</strong><div style="font-size:12px;color:var(--gray);">${i.href}</div></div>
+      ${i.isActive ? '<span class="badge badge--green">Visible</span>' : '<span class="badge badge--gray">Masqué</span>'}
+      <div class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="toggle">${i.isActive ? 'Masquer' : 'Afficher'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </div>
+    </div>`;
+}
+
+async function load() {
+  items = await adminApi('/nav-menu');
+  document.getElementById('itemsList').innerHTML = items.length ? items.map(rowHTML).join('') : '<p class="admin-field-help">Aucun lien.</p>';
+}
+
+document.getElementById('itemsList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('[data-id]').dataset.id;
+  const item = items.find((i) => i.id === id);
+  if (btn.dataset.action === 'edit') openModal(item);
+  if (btn.dataset.action === 'toggle') { await adminApi(`/nav-menu/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !item.isActive }) }); await load(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer le lien "${item.label}" ?`);
+    if (!ok) return;
+    await adminApi(`/nav-menu/${id}`, { method: 'DELETE' }); toast('Lien supprimé.'); await load();
+  }
+});
+
+document.getElementById('newItemBtn').addEventListener('click', () => openModal(null));
+
+function openModal(item) {
+  const isEdit = !!item;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier le lien' : 'Nouveau lien'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="itemForm">
+        <div class="admin-field"><label>Libellé</label><input name="label" required value="${isEdit ? item.label : ''}"></div>
+        <div class="admin-field"><label>Lien (ex. #collection/parfums, #contact)</label><input name="href" required value="${isEdit ? item.href : ''}"></div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || item.isActive ? 'checked' : ''}> Visible</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('itemForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = { label: fd.get('label'), href: fd.get('href'), isActive: fd.get('isActive') === 'on' };
+    try {
+      if (isEdit) await adminApi(`/nav-menu/${item.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/nav-menu', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Lien mis à jour.' : 'Lien créé.');
+      overlay.remove(); await load();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('navbar.html');
+  if (!admin) return;
+  await load();
+  makeSortable(document.getElementById('itemsList'), async (orderedIds) => {
+    await adminApi('/nav-menu/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.'); await load();
+  });
+})();
+</script>
+</body>
+</html>

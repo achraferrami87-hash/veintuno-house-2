@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================
+// AUTH
+// ===========================
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  passwordSalt String
+  createdAt    DateTime @default(now())
+}
+
+// ===========================
+// CATALOG
+// ===========================
+model Collection {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  image       String?
+  position    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products             Product[]
+  packs                Pack[]
+  freePackCollections  FreePackEligibleCollection[]
+  promoCodeCollections PromoCodeCollection[]
+}
+
+model Product {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  description       String?
+  notes             String?
+  notesTop          String?
+  notesHeart        String?
+  notesBase         String?
+  gender            String? // homme | femme | unisexe (perfumes only, nullable elsewhere)
+  price             Float
+  stock             Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  images            String   @default("[]") // JSON array of URLs
+  videoUrl          String?
+  shape             String   @default("bottle") // bottle | jar | tube
+  color             String   @default("#0c0c0c")
+  isActive          Boolean  @default(true)
+  isNew             Boolean  @default(false)
+  isBestSeller      Boolean  @default(false)
+  isLimitedEdition  Boolean  @default(false)
+  packEligible      Boolean  @default(true)
+  freePackEligible  Boolean  @default(false)
+  position          Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id])
+
+  packProducts        PackProduct[]
+  freePackProducts     FreePackEligibleProduct[]
+  orderItems           OrderItem[]
+  orderItemComponents  OrderItemComponent[]
+  stockLogs            StockLog[]
+  promoCodeProducts    PromoCodeProduct[]
+}
+
+// ===========================
+// PACKS (classic: fixed size, customer picks N eligible items)
+// ===========================
+model Pack {
+  id                      String   @id @default(cuid())
+  name                    String
+  size                    Int // number of items required
+  price                   Float
+  isCustomizable          Boolean  @default(true) // client picks any eligible items
+  useCollectionEligibility Boolean @default(true) // true = whole collection eligible, false = use explicit PackProduct list
+  isActive                Boolean  @default(true)
+  position                Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id])
+
+  eligibleProducts  PackProduct[]
+  orderItems        OrderItem[]
+  promoCodePacks    PromoCodePack[]
+}
+
+model PackProduct {
+  packId    String
+  productId String
+  pack      Pack    @relation(fields: [packId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([packId, productId])
+}
+
+// ===========================
+// FREE PACK (cross-collection, admin-defined eligibility rules)
+// ===========================
+model FreePackConfig {
+  id                 String   @id @default(cuid())
+  name               String   @default("FREE PACK")
+  minItems           Int      @default(3)
+  allowMixCategories Boolean  @default(true)
+  isActive           Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+
+  eligibleCollections FreePackEligibleCollection[]
+  eligibleProducts    FreePackEligibleProduct[]
+}
+
+model FreePackEligibleCollection {
+  freePackConfigId String
+  collectionId     String
+  freePackConfig   FreePackConfig @relation(fields: [freePackConfigId], references: [id], onDelete: Cascade)
+  collection       Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([freePackConfigId, collectionId])
+}
+
+model FreePackEligibleProduct {
+  freePackConfigId String
+  productId        String
+  freePackConfig   FreePackConfig @relation(fields: [freePackConfigId], references: [id], onDelete: Cascade)
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([freePackConfigId, productId])
+}
+
+// ===========================
+// PROMO CODES
+// ===========================
+model PromoCode {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  type           String // PERCENT | FIXED
+  value          Float
+  expiresAt      DateTime?
+  usageLimit     Int?
+  usageCount     Int       @default(0)
+  minOrderAmount Float?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  eligibleProducts    PromoCodeProduct[]
+  eligiblePacks       PromoCodePack[]
+  eligibleCollections PromoCodeCollection[]
+  orders              Order[]
+}
+
+model PromoCodeProduct {
+  promoCodeId String
+  productId   String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, productId])
+}
+
+model PromoCodePack {
+  promoCodeId String
+  packId      String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  pack        Pack      @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, packId])
+}
+
+model PromoCodeCollection {
+  promoCodeId  String
+  collectionId String
+  promoCode    PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, collectionId])
+}
+
+// ===========================
+// CUSTOMERS & ORDERS
+// ===========================
+model Customer {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String   @unique
+  address   String
+  city      String
+  createdAt DateTime @default(now())
+
+  orders        Order[]
+  loyaltyLedger LoyaltyLedger[]
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  orderNumber    String   @unique
+  fullName       String
+  phone          String
+  address        String
+  city           String
+  subtotal       Float
+  discountAmount Float    @default(0)
+  deliveryFee    Float    @default(0)
+  total          Float
+  status         String   @default("PENDING") // PENDING|CONFIRMED|PREPARING|SHIPPED|DELIVERED|CANCELLED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
+
+  items         OrderItem[]
+  loyaltyLedger LoyaltyLedger[]
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  kind       String // PRODUCT | PACK | FREE_PACK
+  name       String
+  unitPrice  Float
+  quantity   Int     @default(1)
+  detail     String? // human-readable snapshot (e.g. fragrance list)
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  packId String?
+  pack   Pack?   @relation(fields: [packId], references: [id])
+
+  components OrderItemComponent[]
+}
+
+model OrderItemComponent {
+  id          String @id @default(cuid())
+  name        String
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+}
+
+model StockLog {
+  id             String   @id @default(cuid())
+  changeAmount   Int
+  reason         String
+  resultingStock Int
+  createdAt      DateTime @default(now())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// ===========================
+// HOMEPAGE BUILDER
+// ===========================
+model HeroSlide {
+  id               String   @id @default(cuid())
+  eyebrow          String?
+  title            String
+  subtitle         String?
+  imageUrl         String?
+  videoUrl         String?
+  gradientFallback String?
+  ctaText1         String?
+  ctaHref1         String?
+  ctaText2         String?
+  ctaHref2         String?
+  position         Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model HomepageSection {
+  id        String   @id @default(cuid())
+  type      String // FEATURED_PRODUCTS | FEATURED_COLLECTIONS | BEST_SELLERS | NEW_ARRIVALS | PROMO_BANNER | TEXT_IMAGE | TESTIMONIALS
+  title     String?
+  subtitle  String?
+  config    String   @default("{}") // JSON, shape depends on `type`
+  position  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===========================
+// NAVBAR (admin-managed static links; the "Collections" dropdown
+// itself is always derived live from the Collection table, not stored here)
+// ===========================
+model NavMenuItem {
+  id        String   @id @default(cuid())
+  label     String
+  href      String
+  position  Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===========================
+// LOYALTY PROGRAM
+// ===========================
+model LoyaltySettings {
+  id             String   @id @default(cuid())
+  amountPerPoint Float    @default(199) // orderTotal / amountPerPoint = points earned
+  isActive       Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+model LoyaltyReward {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  pointsRequired   Float
+  productsIncluded String?  // free-form description of what's included
+  redemptionLimit  Int?
+  isActive         Boolean  @default(true)
+  position         Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  redemptions LoyaltyLedger[]
+}
+
+model LoyaltyLedger {
+  id        String   @id @default(cuid())
+  type      String // EARNED | MANUAL_ADD | MANUAL_REMOVE | REDEEMED | REVERSED
+  points    Float // positive = credit, negative = debit
+  note      String?
+  createdAt DateTime @default(now())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  rewardId String?
+  reward   LoyaltyReward? @relation(fields: [rewardId], references: [id])
+
+  reversesEntryId String?
+}

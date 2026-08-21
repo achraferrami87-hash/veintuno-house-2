@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collections — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Collections</h1>
+        <p>Créez de nouvelles catégories, glissez-déposez pour réordonner leur affichage.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newCollectionBtn">+ Nouvelle collection</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th></th><th></th><th>Nom</th><th>Slug</th><th>Produits</th><th>Packs</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="collectionsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let collections = [];
+
+function rowHTML(c) {
+  return `
+    <tr data-sortable-id="${c.id}" data-id="${c.id}" draggable="true">
+      <td class="drag-handle">⠿</td>
+      <td><div class="thumb-preview">${c.image ? `<img src="${c.image}" style="width:100%;height:100%;object-fit:cover;">` : ''}</div></td>
+      <td><strong>${c.name}</strong></td>
+      <td style="color:var(--gray);">${c.slug}</td>
+      <td>${c._count ? c._count.products : 0}</td>
+      <td>${c._count ? c._count.packs : 0}</td>
+      <td>${c.isActive ? '<span class="badge badge--green">Visible</span>' : '<span class="badge badge--gray">Masquée</span>'}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="toggle">${c.isActive ? 'Masquer' : 'Afficher'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  collections = await adminApi('/collections');
+  document.getElementById('collectionsBody').innerHTML = collections.map(rowHTML).join('');
+}
+
+document.getElementById('collectionsBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const collection = collections.find((c) => c.id === id);
+
+  if (btn.dataset.action === 'edit') openModal(collection);
+  if (btn.dataset.action === 'toggle') {
+    await adminApi(`/collections/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !collection.isActive }) });
+    toast('Statut mis à jour.'); await loadAll();
+  }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer la collection "${collection.name}" ?`);
+    if (!ok) return;
+    try { await adminApi(`/collections/${id}`, { method: 'DELETE' }); toast('Collection supprimée.'); await loadAll(); }
+    catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newCollectionBtn').addEventListener('click', () => openModal(null));
+
+function openModal(collection) {
+  const isEdit = !!collection;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier la collection' : 'Nouvelle collection'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="collectionForm">
+        <div class="admin-field"><label>Nom</label><input name="name" required value="${isEdit ? collection.name : ''}"></div>
+        <div class="admin-field"><label>Description</label><textarea name="description">${isEdit ? (collection.description || '') : ''}</textarea></div>
+        <div class="admin-field">
+          <label>Image</label>
+          <div id="imgPreview" style="margin-bottom:8px;">${isEdit && collection.image ? `<img src="${collection.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;">` : ''}</div>
+          <input type="file" id="imgUpload" accept="image/*">
+          <input type="hidden" name="image" value="${isEdit ? (collection.image || '') : ''}">
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || collection.isActive ? 'checked' : ''}> Visible sur le site</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('imgUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      document.querySelector('[name="image"]').value = result.url;
+      document.getElementById('imgPreview').innerHTML = `<img src="${result.url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;">`;
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  document.getElementById('collectionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on' };
+    try {
+      if (isEdit) await adminApi(`/collections/${collection.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/collections', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Collection mise à jour.' : 'Collection créée.');
+      overlay.remove(); await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('collections.html');
+  if (!admin) return;
+  await loadAll();
+  makeSortable(document.getElementById('collectionsBody'), async (orderedIds) => {
+    await adminApi('/collections/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.');
+    await loadAll();
+  });
+})();
+</script>
+</body>
+</html>

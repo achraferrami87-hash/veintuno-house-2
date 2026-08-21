@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aperçu — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Aperçu</h1>
+        <p>Performance générale de la boutique.</p>
+      </div>
+    </div>
+
+    <div class="admin-tabs" id="periodTabs">
+      <div class="admin-tab is-active" data-days="7">7 derniers jours</div>
+      <div class="admin-tab" data-days="30">30 derniers jours</div>
+      <div class="admin-tab" data-days="custom">Personnalisé</div>
+    </div>
+    <div class="admin-toolbar" id="customRange" style="display:none;">
+      <input type="date" id="fromDate">
+      <span style="color:var(--gray);">→</span>
+      <input type="date" id="toDate">
+      <button type="button" class="admin-btn admin-btn--small" id="applyRangeBtn">Appliquer</button>
+    </div>
+
+    <div class="admin-grid admin-grid--4" style="margin-bottom:24px;">
+      <div class="stat-card"><p class="stat-card__label">Chiffre d'affaires</p><p class="stat-card__value" id="statRevenue">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Commandes</p><p class="stat-card__value" id="statOrders">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Panier moyen</p><p class="stat-card__value" id="statAvg">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Clients</p><p class="stat-card__value" id="statCustomers">—</p><p class="stat-card__sub" id="statRepeat"></p></div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <p class="stat-card__label" style="margin-bottom:12px;">Ventes — 30 derniers jours</p>
+      <div id="salesChart"></div>
+    </div>
+
+    <div class="admin-grid admin-grid--3" style="margin-bottom:24px;">
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Produits les plus vendus</p>
+        <ul id="topProducts" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Packs les plus vendus</p>
+        <ul id="topPacks" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Collections populaires</p>
+        <ul id="topCollections" class="admin-list"></ul>
+      </div>
+    </div>
+
+    <div class="admin-grid admin-grid--2">
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Commandes récentes</p>
+        <ul id="recentOrders" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Alertes de stock</p>
+        <ul id="stockAlerts" class="admin-list"></ul>
+      </div>
+    </div>
+  </main>
+</div>
+<style>
+.admin-list { display: flex; flex-direction: column; gap: 10px; }
+.admin-list li { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.admin-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.admin-list li span:last-child { color: var(--gray); font-size: 12px; }
+</style>
+<script src="js/admin-shared.js"></script>
+<script>
+function toDateInputValue(d) { return d.toISOString().slice(0, 10); }
+
+async function loadAnalytics(params) {
+  const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+  const data = await adminApi(`/analytics${query}`);
+
+  document.getElementById('statRevenue').textContent = formatMoney(data.revenue);
+  document.getElementById('statOrders').textContent = data.orderCount;
+  document.getElementById('statAvg').textContent = formatMoney(data.avgOrderValue);
+  document.getElementById('statCustomers').textContent = data.customerCount;
+  document.getElementById('statRepeat').textContent = `${data.repeatCustomers} client(s) récurrent(s)`;
+
+  renderLineChart(document.getElementById('salesChart'), data.salesOverTime.map((d) => ({ value: d.total })));
+
+  const topProducts = document.getElementById('topProducts');
+  topProducts.innerHTML = data.topProducts.length
+    ? data.topProducts.map((p) => `<li><span>${p.name}</span><span>${formatMoney(p.revenue)}</span></li>`).join('')
+    : '<li><span>Aucune vente pour l\'instant</span></li>';
+
+  const topPacks = document.getElementById('topPacks');
+  topPacks.innerHTML = data.topPacks.length
+    ? data.topPacks.map((p) => `<li><span>${p.name}</span><span>${formatMoney(p.revenue)}</span></li>`).join('')
+    : '<li><span>Aucune vente pour l\'instant</span></li>';
+
+  const topCollections = document.getElementById('topCollections');
+  topCollections.innerHTML = data.topCollections.length
+    ? data.topCollections.map((c) => `<li><span>${c.name}</span><span>${formatMoney(c.revenue)}</span></li>`).join('')
+    : '<li><span>Aucune vente pour l\'instant</span></li>';
+
+  const recentOrders = document.getElementById('recentOrders');
+  recentOrders.innerHTML = data.recentOrders.length
+    ? data.recentOrders.map((o) => `<li><span>${o.orderNumber} — ${o.fullName}</span><span>${formatMoney(o.total)}</span></li>`).join('')
+    : '<li><span>Aucune commande</span></li>';
+
+  const stockAlerts = document.getElementById('stockAlerts');
+  const alerts = [...data.outOfStock.map((p) => ({ ...p, label: 'Rupture' })), ...data.lowStock.map((p) => ({ ...p, label: 'Stock faible' }))];
+  stockAlerts.innerHTML = alerts.length
+    ? alerts.slice(0, 8).map((p) => `<li><span>${p.name}</span><span class="badge ${p.stock <= 0 ? 'badge--red' : 'badge--gold'}">${p.label} (${p.stock})</span></li>`).join('')
+    : '<li><span>Aucune alerte</span></li>';
+}
+
+document.getElementById('periodTabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.admin-tab');
+  if (!tab) return;
+  document.querySelectorAll('#periodTabs .admin-tab').forEach((t) => t.classList.remove('is-active'));
+  tab.classList.add('is-active');
+
+  if (tab.dataset.days === 'custom') {
+    document.getElementById('customRange').style.display = 'flex';
+    return;
+  }
+  document.getElementById('customRange').style.display = 'none';
+  const days = Number(tab.dataset.days);
+  const to = new Date();
+  const from = new Date(); from.setDate(from.getDate() - (days - 1));
+  loadAnalytics({ from: toDateInputValue(from), to: toDateInputValue(to) });
+});
+
+document.getElementById('applyRangeBtn').addEventListener('click', () => {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  if (!from || !to) return;
+  loadAnalytics({ from, to });
+});
+
+(async () => {
+  const admin = await initAdminPage('dashboard.html');
+  if (!admin) return;
+  const to = new Date();
+  const from = new Date(); from.setDate(from.getDate() - 6);
+  document.getElementById('fromDate').value = toDateInputValue(from);
+  document.getElementById('toDate').value = toDateInputValue(to);
+  await loadAnalytics({ from: toDateInputValue(from), to: toDateInputValue(to) });
+})();
+</script>
+</body>
+</html>

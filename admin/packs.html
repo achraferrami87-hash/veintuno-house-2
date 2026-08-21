@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packs — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Packs &amp; Free Pack</h1>
+        <p>Gérez les formules classiques (taille/prix fixes) et les règles du Free Pack.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newPackBtn">+ Nouveau pack</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap" style="margin-bottom:32px;">
+      <table class="admin-table">
+        <thead><tr><th></th><th>Pack</th><th>Collection</th><th>Taille</th><th>Prix</th><th>Éligibilité</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="packsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-header" style="margin-bottom:18px;">
+        <div><h2 style="font-family:var(--serif);font-size:19px;">Configuration du Free Pack</h2><p style="color:var(--gray);font-size:13px;margin-top:4px;">Le client compose librement son pack parmi les produits/collections éligibles.</p></div>
+      </div>
+      <form class="admin-form" id="freePackForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Nom affiché</label><input name="name" required></div>
+          <div class="admin-field"><label>Minimum de produits</label><input type="number" name="minItems" min="1" required></div>
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="allowMixCategories"> Autoriser le mélange entre différentes collections</label>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive"> Actif sur le site</label>
+        <div class="admin-field">
+          <label>Collections éligibles</label>
+          <div class="admin-checkbox-grid" id="freePackCollections"></div>
+        </div>
+        <div class="admin-field">
+          <label>Produits éligibles en plus (optionnel, hors collections cochées ci-dessus)</label>
+          <div class="admin-checkbox-grid" id="freePackProducts" style="max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <div class="admin-modal__actions" style="justify-content:flex-start;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer la configuration</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let packs = [];
+let collections = [];
+let products = [];
+
+function packRowHTML(p) {
+  const col = collections.find((c) => c.id === p.collectionId);
+  return `
+    <tr data-id="${p.id}">
+      <td><strong>${p.name}</strong></td>
+      <td>${col ? col.name : '—'}</td>
+      <td>${p.size} produits</td>
+      <td>${p.price} MAD</td>
+      <td>${p.useCollectionEligibility ? 'Toute la collection' : `${p.eligibleProducts.length} produit(s) choisis`}</td>
+      <td>${p.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="duplicate">Dupliquer</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  [packs, collections, products] = await Promise.all([adminApi('/packs'), adminApi('/collections'), adminApi('/products')]);
+  document.getElementById('packsBody').innerHTML = packs.map(packRowHTML).join('');
+  await loadFreePack();
+}
+
+document.getElementById('packsBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const pack = packs.find((p) => p.id === id);
+  if (btn.dataset.action === 'edit') openPackModal(pack);
+  if (btn.dataset.action === 'duplicate') { await adminApi(`/packs/${id}/duplicate`, { method: 'POST' }); toast('Pack dupliqué.'); await loadAll(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer le pack "${pack.name}" ?`);
+    if (!ok) return;
+    try { await adminApi(`/packs/${id}`, { method: 'DELETE' }); toast('Pack supprimé.'); await loadAll(); }
+    catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newPackBtn').addEventListener('click', () => openPackModal(null));
+
+function openPackModal(pack) {
+  const isEdit = !!pack;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier le pack' : 'Nouveau pack'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="packForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Nom</label><input name="name" required value="${isEdit ? pack.name : ''}"></div>
+          <div class="admin-field"><label>Collection</label>
+            <select name="collectionId" id="packCollectionSelect" required>${collections.map((c) => `<option value="${c.id}" ${isEdit && pack.collectionId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Taille (nb. de produits)</label><input type="number" name="size" min="2" required value="${isEdit ? pack.size : 3}"></div>
+          <div class="admin-field"><label>Prix (MAD)</label><input type="number" step="0.01" name="price" required value="${isEdit ? pack.price : ''}"></div>
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || pack.isActive ? 'checked' : ''}> Actif</label>
+        <label class="admin-checkbox"><input type="checkbox" id="useCollectionEligibility" name="useCollectionEligibility" ${!isEdit || pack.useCollectionEligibility ? 'checked' : ''}> Tous les produits de la collection sont éligibles</label>
+        <div class="admin-field" id="explicitProductsField" style="display:${isEdit && !pack.useCollectionEligibility ? 'block' : 'none'};">
+          <label>Produits éligibles (sélection manuelle)</label>
+          <div class="admin-checkbox-grid" id="packProductsList" style="max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  function renderProductPicker() {
+    const colId = document.getElementById('packCollectionSelect').value;
+    const eligibleIds = new Set(isEdit ? pack.eligibleProducts.map((r) => r.productId) : []);
+    document.getElementById('packProductsList').innerHTML = products.filter((p) => p.collectionId === colId).map((p) => `
+      <label class="admin-checkbox"><input type="checkbox" value="${p.id}" ${eligibleIds.has(p.id) ? 'checked' : ''}> ${p.name}</label>
+    `).join('');
+  }
+  renderProductPicker();
+  document.getElementById('packCollectionSelect').addEventListener('change', renderProductPicker);
+  document.getElementById('useCollectionEligibility').addEventListener('change', (e) => {
+    document.getElementById('explicitProductsField').style.display = e.target.checked ? 'none' : 'block';
+  });
+
+  document.getElementById('packForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const useCol = fd.get('useCollectionEligibility') === 'on';
+    const payload = {
+      name: fd.get('name'), collectionId: fd.get('collectionId'),
+      size: fd.get('size'), price: fd.get('price'),
+      isActive: fd.get('isActive') === 'on', useCollectionEligibility: useCol,
+      isCustomizable: true,
+    };
+    if (!useCol) {
+      payload.eligibleProductIds = Array.from(document.querySelectorAll('#packProductsList input:checked')).map((el) => el.value);
+    }
+    try {
+      if (isEdit) await adminApi(`/packs/${pack.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/packs', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Pack mis à jour.' : 'Pack créé.');
+      overlay.remove(); await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+async function loadFreePack() {
+  const config = await adminApi('/packs/free-pack/config');
+  const form = document.getElementById('freePackForm');
+  form.name.value = config.name;
+  form.minItems.value = config.minItems;
+  form.allowMixCategories.checked = config.allowMixCategories;
+  form.isActive.checked = config.isActive;
+
+  const eligibleCollectionIds = new Set(config.eligibleCollections.map((r) => r.collectionId));
+  document.getElementById('freePackCollections').innerHTML = collections.map((c) => `
+    <label class="admin-checkbox"><input type="checkbox" value="${c.id}" ${eligibleCollectionIds.has(c.id) ? 'checked' : ''}> ${c.name}</label>
+  `).join('');
+
+  const eligibleProductIds = new Set(config.eligibleProducts.map((r) => r.productId));
+  document.getElementById('freePackProducts').innerHTML = products.map((p) => `
+    <label class="admin-checkbox"><input type="checkbox" value="${p.id}" ${eligibleProductIds.has(p.id) ? 'checked' : ''}> ${p.name}</label>
+  `).join('');
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const payload = {
+      name: fd.get('name'), minItems: fd.get('minItems'),
+      allowMixCategories: fd.get('allowMixCategories') === 'on',
+      isActive: fd.get('isActive') === 'on',
+      eligibleCollectionIds: Array.from(document.querySelectorAll('#freePackCollections input:checked')).map((el) => el.value),
+      eligibleProductIds: Array.from(document.querySelectorAll('#freePackProducts input:checked')).map((el) => el.value),
+    };
+    try {
+      await adminApi('/packs/free-pack/config', { method: 'PUT', body: JSON.stringify(payload) });
+      toast('Configuration du Free Pack enregistrée.');
+    } catch (err) { toast(err.message, 'error'); }
+  };
+}
+
+(async () => {
+  const admin = await initAdminPage('packs.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

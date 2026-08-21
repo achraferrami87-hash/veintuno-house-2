@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produits — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Produits</h1>
+        <p>Gérez le catalogue : prix, stock, visuels, statuts, éligibilité aux packs.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newProductBtn">+ Nouveau produit</button>
+      </div>
+    </div>
+
+    <div class="admin-toolbar">
+      <input type="search" id="searchInput" placeholder="Rechercher un produit...">
+      <select id="collectionFilter"><option value="">Toutes les collections</option></select>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th></th><th>Produit</th><th>Collection</th><th>Prix</th><th>Stock</th><th>Statut</th><th>Tags</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="productsBody"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucun produit.</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let allProducts = [];
+let collections = [];
+
+function productRowHTML(p) {
+  const col = collections.find((c) => c.id === p.collectionId);
+  const tags = [];
+  if (p.isBestSeller) tags.push('<span class="badge badge--gold">Best Seller</span>');
+  if (p.isNew) tags.push('<span class="badge badge--gray">New</span>');
+  if (p.isLimitedEdition) tags.push('<span class="badge badge--black">Édition limitée</span>');
+  let images = [];
+  try { images = JSON.parse(p.images || '[]'); } catch (e) {}
+
+  return `
+    <tr data-id="${p.id}">
+      <td><div class="thumb-preview">${images[0] ? `<img src="${images[0]}" style="width:100%;height:100%;object-fit:cover;">` : svgFor(p.shape, p.color)}</div></td>
+      <td><strong>${p.name}</strong><div style="color:var(--gray);font-size:12px;">${p.notes || ''}</div></td>
+      <td>${col ? col.name : '—'}</td>
+      <td>${p.price} MAD</td>
+      <td>${p.stock}</td>
+      <td>${p.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}</td>
+      <td>${tags.join(' ')}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="duplicate">Dupliquer</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+function svgFor(shape, color) {
+  if (shape === 'jar') return `<svg viewBox="0 0 120 220"><rect x="26" y="60" width="68" height="100" fill="${color}"/></svg>`;
+  if (shape === 'tube') return `<svg viewBox="0 0 120 220"><path d="M40 60 l12 128 h16 L80 60Z" fill="${color}"/></svg>`;
+  return `<svg viewBox="0 0 120 220"><rect x="34" y="90" width="52" height="80" fill="${color}"/></svg>`;
+}
+
+function renderTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const colFilter = document.getElementById('collectionFilter').value;
+  const filtered = allProducts.filter((p) => {
+    const matchSearch = !search || p.name.toLowerCase().includes(search);
+    const matchCol = !colFilter || p.collectionId === colFilter;
+    return matchSearch && matchCol;
+  });
+  document.getElementById('productsBody').innerHTML = filtered.map(productRowHTML).join('');
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+}
+
+async function loadAll() {
+  [allProducts, collections] = await Promise.all([adminApi('/products'), adminApi('/collections')]);
+  const filterSelect = document.getElementById('collectionFilter');
+  filterSelect.innerHTML = '<option value="">Toutes les collections</option>' +
+    collections.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  renderTable();
+}
+
+document.getElementById('searchInput').addEventListener('input', renderTable);
+document.getElementById('collectionFilter').addEventListener('change', renderTable);
+
+document.getElementById('productsBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const product = allProducts.find((p) => p.id === id);
+
+  if (btn.dataset.action === 'edit') openProductModal(product);
+  if (btn.dataset.action === 'duplicate') {
+    await adminApi(`/products/${id}/duplicate`, { method: 'POST' });
+    toast('Produit dupliqué.');
+    await loadAll();
+  }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer "${product.name}" ? Cette action est irréversible.`);
+    if (!ok) return;
+    try {
+      await adminApi(`/products/${id}`, { method: 'DELETE' });
+      toast('Produit supprimé.');
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newProductBtn').addEventListener('click', () => openProductModal(null));
+
+function openProductModal(product) {
+  const isEdit = !!product;
+  let images = [];
+  if (isEdit) { try { images = JSON.parse(product.images || '[]'); } catch (e) {} }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header">
+        <h2>${isEdit ? 'Modifier le produit' : 'Nouveau produit'}</h2>
+        <button class="admin-modal__close" data-close>&times;</button>
+      </div>
+      <form class="admin-form" id="productForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Nom</label><input name="name" required value="${isEdit ? product.name : ''}"></div>
+          <div class="admin-field"><label>Collection</label>
+            <select name="collectionId" required>${collections.map((c) => `<option value="${c.id}" ${isEdit && product.collectionId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Prix (MAD)</label><input type="number" step="0.01" name="price" required value="${isEdit ? product.price : ''}"></div>
+          <div class="admin-field"><label>Stock</label><input type="number" name="stock" value="${isEdit ? product.stock : 50}"></div>
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Notes / courte description (carte produit)</label><input name="notes" value="${isEdit ? (product.notes || '') : ''}" placeholder="ex. Boisé / Ambré"></div>
+          <div class="admin-field"><label>Genre (parfums)</label>
+            <select name="gender">
+              <option value="" ${isEdit && !product.gender ? 'selected' : ''}>—</option>
+              <option value="homme" ${isEdit && product.gender === 'homme' ? 'selected' : ''}>Homme</option>
+              <option value="femme" ${isEdit && product.gender === 'femme' ? 'selected' : ''}>Femme</option>
+              <option value="unisexe" ${isEdit && product.gender === 'unisexe' ? 'selected' : ''}>Unisexe</option>
+            </select>
+          </div>
+        </div>
+        <div class="admin-field"><label>Description longue</label><textarea name="description">${isEdit ? (product.description || '') : ''}</textarea></div>
+        <div class="admin-field">
+          <label>Notes olfactives (page produit)</label>
+          <div class="admin-form__row" style="margin-bottom:10px;">
+            <input name="notesTop" placeholder="Notes de tête (ex. Bergamote, citron)" value="${isEdit ? (product.notesTop || '') : ''}">
+            <input name="notesHeart" placeholder="Notes de cœur (ex. Jasmin, lavande)" value="${isEdit ? (product.notesHeart || '') : ''}">
+          </div>
+          <input name="notesBase" placeholder="Notes de fond (ex. Ambre, bois)" value="${isEdit ? (product.notesBase || '') : ''}">
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Forme du visuel</label>
+            <select name="shape">
+              <option value="bottle" ${isEdit && product.shape === 'bottle' ? 'selected' : ''}>Flacon</option>
+              <option value="jar" ${isEdit && product.shape === 'jar' ? 'selected' : ''}>Pot</option>
+              <option value="tube" ${isEdit && product.shape === 'tube' ? 'selected' : ''}>Tube</option>
+            </select>
+          </div>
+          <div class="admin-field"><label>Couleur</label><input type="color" name="color" value="${isEdit ? product.color : '#0c0c0c'}"></div>
+        </div>
+        <div class="admin-field">
+          <label>Images</label>
+          <div id="imageList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+          <input type="file" id="imageUpload" accept="image/*">
+          <p class="admin-field-help">La première image est utilisée comme visuel principal.</p>
+        </div>
+        <div class="admin-field"><label>Vidéo (URL, optionnel)</label><input name="videoUrl" value="${isEdit ? (product.videoUrl || '') : ''}"></div>
+        <div class="admin-field">
+          <label>Statuts</label>
+          <div class="admin-checkbox-grid">
+            <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || product.isActive ? 'checked' : ''}> Actif (visible sur le site)</label>
+            <label class="admin-checkbox"><input type="checkbox" name="isNew" ${isEdit && product.isNew ? 'checked' : ''}> New</label>
+            <label class="admin-checkbox"><input type="checkbox" name="isBestSeller" ${isEdit && product.isBestSeller ? 'checked' : ''}> Best Seller</label>
+            <label class="admin-checkbox"><input type="checkbox" name="isLimitedEdition" ${isEdit && product.isLimitedEdition ? 'checked' : ''}> Édition limitée</label>
+            <label class="admin-checkbox"><input type="checkbox" name="packEligible" ${!isEdit || product.packEligible ? 'checked' : ''}> Éligible aux packs classiques</label>
+            <label class="admin-checkbox"><input type="checkbox" name="freePackEligible" ${isEdit && product.freePackEligible ? 'checked' : ''}> Éligible au Free Pack</label>
+          </div>
+        </div>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function renderImages() {
+    document.getElementById('imageList').innerHTML = images.map((url, i) => `
+      <div style="position:relative;">
+        <img src="${url}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;">
+        <button type="button" data-remove-img="${i}" style="position:absolute;top:-6px;right:-6px;background:#000;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;">&times;</button>
+      </div>`).join('');
+    document.getElementById('imageList').querySelectorAll('[data-remove-img]').forEach((btn) => {
+      btn.addEventListener('click', () => { images.splice(Number(btn.dataset.removeImg), 1); renderImages(); });
+    });
+  }
+  renderImages();
+
+  document.getElementById('imageUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      images.push(result.url);
+      renderImages();
+    } catch (err) { toast(err.message, 'error'); }
+    e.target.value = '';
+  });
+
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('productForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name'), collectionId: fd.get('collectionId'),
+      price: fd.get('price'), stock: fd.get('stock'),
+      notes: fd.get('notes'), description: fd.get('description'),
+      gender: fd.get('gender'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
+      images,
+      isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',
+      isBestSeller: fd.get('isBestSeller') === 'on', isLimitedEdition: fd.get('isLimitedEdition') === 'on',
+      packEligible: fd.get('packEligible') === 'on', freePackEligible: fd.get('freePackEligible') === 'on',
+    };
+    try {
+      if (isEdit) await adminApi(`/products/${product.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/products', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Produit mis à jour.' : 'Produit créé.');
+      overlay.remove();
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('products.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

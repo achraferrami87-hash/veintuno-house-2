@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homepage — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div><h1>Éditeur de la homepage</h1><p>Slideshow, bannières et sections — glissez-déposez pour réordonner.</p></div>
+      <div class="admin-header__actions"><button type="button" class="admin-btn admin-btn--ghost" id="togglePreviewBtn">Aperçu en direct</button></div>
+    </div>
+
+    <div class="admin-card" id="previewCard" style="display:none;margin-bottom:28px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <p class="stat-card__label">Aperçu du site</p>
+        <button type="button" class="admin-btn admin-btn--small admin-btn--ghost" id="refreshPreviewBtn">Rafraîchir</button>
+      </div>
+      <iframe id="previewFrame" src="/" style="width:100%;height:520px;border:1px solid var(--border);border-radius:8px;"></iframe>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:28px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-family:var(--serif);font-size:19px;">Slideshow (Hero)</h2>
+        <button type="button" class="admin-btn admin-btn--gold admin-btn--small" id="newSlideBtn">+ Ajouter un slide</button>
+      </div>
+      <div id="slidesList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
+    <div class="admin-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-family:var(--serif);font-size:19px;">Sections de la homepage</h2>
+        <button type="button" class="admin-btn admin-btn--gold admin-btn--small" id="newSectionBtn">+ Ajouter une section</button>
+      </div>
+      <div id="sectionsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+  </main>
+</div>
+
+<style>
+.editor-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--white);
+}
+.editor-row__body { flex: 1; min-width: 0; }
+.editor-row__title { font-weight: 500; }
+.editor-row__sub { font-size: 12px; color: var(--gray); margin-top: 2px; }
+</style>
+
+<script src="js/admin-shared.js"></script>
+<script>
+const SECTION_TYPES = ['PACKS', 'FEATURED_COLLECTIONS', 'FEATURED_PRODUCTS', 'BEST_SELLERS', 'NEW_ARRIVALS', 'TEXT_IMAGE', 'TESTIMONIALS', 'PROMO_BANNER'];
+const CONFIG_TEMPLATES = {
+  PACKS: { collectionSlug: 'parfums' },
+  FEATURED_COLLECTIONS: { collectionSlugs: ['parfums', 'gels-douche', 'supplements', 'cosmetics'] },
+  FEATURED_PRODUCTS: { productSlugs: ['atlas-noir', 'minuit-cuir'] },
+  BEST_SELLERS: {},
+  NEW_ARRIVALS: {},
+  TEXT_IMAGE: { body: 'Votre texte ici...' },
+  TESTIMONIALS: { items: [{ rating: 5, quote: 'Un avis client...', author: 'Nom, Ville' }] },
+  PROMO_BANNER: { body: 'Description de la promotion', ctaText: 'En savoir plus', ctaHref: '#collections' },
+};
+
+let slides = [], sections = [];
+
+document.getElementById('togglePreviewBtn').addEventListener('click', () => {
+  const card = document.getElementById('previewCard');
+  card.style.display = card.style.display === 'none' ? 'block' : 'none';
+});
+document.getElementById('refreshPreviewBtn').addEventListener('click', () => {
+  document.getElementById('previewFrame').src = document.getElementById('previewFrame').src;
+});
+
+// ---------- Slides ----------
+function slideRowHTML(s) {
+  return `
+    <div class="editor-row" data-sortable-id="${s.id}" data-id="${s.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="editor-row__body">
+        <div class="editor-row__title">${s.title.replace(/<[^>]+>/g, ' ')}</div>
+        <div class="editor-row__sub">${s.eyebrow || ''}</div>
+      </div>
+      ${s.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}
+      <div class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="duplicate">Dupliquer</button>
+        <button data-action="toggle">${s.isActive ? 'Désactiver' : 'Activer'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </div>
+    </div>`;
+}
+
+async function loadSlides() {
+  slides = await adminApi('/homepage/slides');
+  document.getElementById('slidesList').innerHTML = slides.length
+    ? slides.map(slideRowHTML).join('')
+    : '<p class="admin-field-help">Aucun slide.</p>';
+}
+
+document.getElementById('slidesList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('[data-id]').dataset.id;
+  const slide = slides.find((s) => s.id === id);
+  if (btn.dataset.action === 'edit') openSlideModal(slide);
+  if (btn.dataset.action === 'duplicate') { await adminApi(`/homepage/slides/${id}/duplicate`, { method: 'POST' }); toast('Slide dupliqué.'); await loadSlides(); }
+  if (btn.dataset.action === 'toggle') { await adminApi(`/homepage/slides/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !slide.isActive }) }); await loadSlides(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog('Supprimer ce slide ?');
+    if (!ok) return;
+    await adminApi(`/homepage/slides/${id}`, { method: 'DELETE' }); toast('Slide supprimé.'); await loadSlides();
+  }
+});
+
+document.getElementById('newSlideBtn').addEventListener('click', () => openSlideModal(null));
+
+function openSlideModal(slide) {
+  const isEdit = !!slide;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier le slide' : 'Nouveau slide'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="slideForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Eyebrow (petit texte au-dessus)</label><input name="eyebrow" value="${isEdit ? (slide.eyebrow || '') : ''}"></div>
+          <div class="admin-field"><label>Titre (HTML simple autorisé : &lt;br&gt;, &lt;em&gt;)</label><input name="title" required value="${isEdit ? slide.title : ''}"></div>
+        </div>
+        <div class="admin-field"><label>Sous-titre</label><textarea name="subtitle">${isEdit ? (slide.subtitle || '') : ''}</textarea></div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Image (upload)</label>
+            <input type="file" id="slideImageUpload" accept="image/*">
+            <input type="hidden" name="imageUrl" value="${isEdit ? (slide.imageUrl || '') : ''}">
+          </div>
+          <div class="admin-field"><label>Vidéo (upload, prioritaire sur l'image)</label>
+            <input type="file" id="slideVideoUpload" accept="video/*">
+            <input type="hidden" name="videoUrl" value="${isEdit ? (slide.videoUrl || '') : ''}">
+          </div>
+        </div>
+        <div class="admin-field"><label>Dégradé de secours (CSS, si aucune image/vidéo)</label><input name="gradientFallback" value="${isEdit ? (slide.gradientFallback || '') : 'linear-gradient(180deg, #0c0c0c 0%, #161513 100%)'}"></div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Bouton 1 — texte</label><input name="ctaText1" value="${isEdit ? (slide.ctaText1 || '') : ''}"></div>
+          <div class="admin-field"><label>Bouton 1 — lien</label><input name="ctaHref1" value="${isEdit ? (slide.ctaHref1 || '') : '#packs'}"></div>
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Bouton 2 — texte (optionnel)</label><input name="ctaText2" value="${isEdit ? (slide.ctaText2 || '') : ''}"></div>
+          <div class="admin-field"><label>Bouton 2 — lien</label><input name="ctaHref2" value="${isEdit ? (slide.ctaHref2 || '') : '#collections'}"></div>
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || slide.isActive ? 'checked' : ''}> Actif</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  async function handleUpload(inputId, hiddenName) {
+    document.getElementById(inputId).addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const result = await adminApi('/upload', { method: 'POST', body: fd });
+        document.querySelector(`[name="${hiddenName}"]`).value = result.url;
+        toast('Fichier importé.');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  }
+  handleUpload('slideImageUpload', 'imageUrl');
+  handleUpload('slideVideoUpload', 'videoUrl');
+
+  document.getElementById('slideForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = Object.fromEntries(fd.entries());
+    payload.isActive = fd.get('isActive') === 'on';
+    try {
+      if (isEdit) await adminApi(`/homepage/slides/${slide.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/homepage/slides', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Slide mis à jour.' : 'Slide créé.');
+      overlay.remove(); await loadSlides();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+// ---------- Sections ----------
+function sectionRowHTML(s) {
+  return `
+    <div class="editor-row" data-sortable-id="${s.id}" data-id="${s.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="editor-row__body">
+        <div class="editor-row__title">${s.title || s.type}</div>
+        <div class="editor-row__sub"><span class="badge badge--black">${s.type}</span> ${s.subtitle || ''}</div>
+      </div>
+      ${s.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}
+      <div class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="duplicate">Dupliquer</button>
+        <button data-action="toggle">${s.isActive ? 'Désactiver' : 'Activer'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </div>
+    </div>`;
+}
+
+async function loadSections() {
+  sections = await adminApi('/homepage/sections');
+  document.getElementById('sectionsList').innerHTML = sections.length
+    ? sections.map(sectionRowHTML).join('')
+    : '<p class="admin-field-help">Aucune section.</p>';
+}
+
+document.getElementById('sectionsList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('[data-id]').dataset.id;
+  const section = sections.find((s) => s.id === id);
+  if (btn.dataset.action === 'edit') openSectionModal(section);
+  if (btn.dataset.action === 'duplicate') { await adminApi(`/homepage/sections/${id}/duplicate`, { method: 'POST' }); toast('Section dupliquée.'); await loadSections(); }
+  if (btn.dataset.action === 'toggle') { await adminApi(`/homepage/sections/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !section.isActive }) }); await loadSections(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog('Supprimer cette section ?');
+    if (!ok) return;
+    await adminApi(`/homepage/sections/${id}`, { method: 'DELETE' }); toast('Section supprimée.'); await loadSections();
+  }
+});
+
+document.getElementById('newSectionBtn').addEventListener('click', () => openSectionModal(null));
+
+function openSectionModal(section) {
+  const isEdit = !!section;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier la section' : 'Nouvelle section'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="sectionForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Type</label>
+            <select name="type" id="sectionType">${SECTION_TYPES.map((t) => `<option value="${t}" ${isEdit && section.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          </div>
+          <div class="admin-field"><label>Titre (eyebrow)</label><input name="title" value="${isEdit ? (section.title || '') : ''}"></div>
+        </div>
+        <div class="admin-field"><label>Sous-titre</label><input name="subtitle" value="${isEdit ? (section.subtitle || '') : ''}"></div>
+        <div class="admin-field">
+          <label>Contenu (JSON)</label>
+          <textarea name="config" id="sectionConfig" style="min-height:140px;font-family:monospace;font-size:12px;">${isEdit ? JSON.stringify(section.config, null, 2) : JSON.stringify(CONFIG_TEMPLATES.PACKS, null, 2)}</textarea>
+          <p class="admin-field-help">Selon le type : productSlugs / collectionSlugs / collectionSlug / body / items / ctaText+ctaHref.</p>
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || section.isActive ? 'checked' : ''}> Actif</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  if (!isEdit) {
+    document.getElementById('sectionType').addEventListener('change', (e) => {
+      document.getElementById('sectionConfig').value = JSON.stringify(CONFIG_TEMPLATES[e.target.value] || {}, null, 2);
+    });
+  }
+
+  document.getElementById('sectionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    let config;
+    try { config = JSON.parse(fd.get('config') || '{}'); }
+    catch (err) { toast('JSON invalide dans le champ Contenu.', 'error'); return; }
+    const payload = { type: fd.get('type'), title: fd.get('title'), subtitle: fd.get('subtitle'), config, isActive: fd.get('isActive') === 'on' };
+    try {
+      if (isEdit) await adminApi(`/homepage/sections/${section.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/homepage/sections', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Section mise à jour.' : 'Section créée.');
+      overlay.remove(); await loadSections();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('homepage-editor.html');
+  if (!admin) return;
+  await Promise.all([loadSlides(), loadSections()]);
+
+  makeSortable(document.getElementById('slidesList'), async (orderedIds) => {
+    await adminApi('/homepage/slides/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.'); await loadSlides();
+  });
+  makeSortable(document.getElementById('sectionsList'), async (orderedIds) => {
+    await adminApi('/homepage/sections/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.'); await loadSections();
+  });
+})();
+</script>
+</body>
+</html>

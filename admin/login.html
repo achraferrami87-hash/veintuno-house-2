@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connexion — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-login">
+  <div class="admin-login__card">
+    <p class="admin-login__brand">XXI<span>VEINTUNO</span> HOUSE</p>
+    <p class="admin-login__tag">Espace Administration</p>
+    <div id="loginError" class="admin-login__error" style="display:none;"></div>
+    <form class="admin-form" id="loginForm">
+      <div class="admin-field">
+        <label>Email</label>
+        <input type="email" name="email" required autocomplete="username">
+      </div>
+      <div class="admin-field">
+        <label>Mot de passe</label>
+        <input type="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="admin-btn admin-btn--gold" style="justify-content:center;margin-top:6px;">Se connecter</button>
+    </form>
+  </div>
+</div>
+<script src="js/admin-shared.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('loginError');
+  errorEl.style.display = 'none';
+  const formData = new FormData(e.target);
+  try {
+    await adminApi('/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: formData.get('email'), password: formData.get('password') }),
+    });
+    location.href = '/admin/dashboard.html';
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

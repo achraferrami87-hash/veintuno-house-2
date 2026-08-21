@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clients — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header"><div><h1>Clients</h1><p>Historique, dépenses et fidélité de chaque client.</p></div></div>
+    <div class="admin-toolbar"><input type="search" id="searchInput" placeholder="Rechercher (nom, téléphone, ville)..."></div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Client</th><th>Téléphone</th><th>Ville</th><th>Commandes</th><th>Total dépensé</th><th></th></tr></thead>
+        <tbody id="customersBody"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucun client.</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let customers = [];
+
+function rowHTML(c) {
+  return `
+    <tr data-id="${c.id}">
+      <td><strong>${c.fullName}</strong>${c.orderCount > 1 ? ' <span class="badge badge--gold">Récurrent</span>' : ''}</td>
+      <td>${c.phone}</td>
+      <td>${c.city}</td>
+      <td>${c.orderCount}</td>
+      <td>${formatMoney(c.totalSpent)}</td>
+      <td class="row-actions"><button data-action="view">Voir l'historique</button></td>
+    </tr>`;
+}
+
+async function load(search) {
+  customers = await adminApi(`/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  document.getElementById('customersBody').innerHTML = customers.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = customers.length ? 'none' : 'block';
+}
+
+let debounceTimer;
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => load(e.target.value), 250);
+});
+
+document.getElementById('customersBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const customer = await adminApi(`/customers/${id}`);
+  openCustomerModal(customer);
+});
+
+function openCustomerModal(customer) {
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${customer.fullName}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <p style="margin-bottom:16px;color:var(--gray);font-size:13px;">${customer.phone} · ${customer.address}, ${customer.city}</p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>N°</th><th>Date</th><th>Articles</th><th>Total</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${customer.orders.map((o) => `<tr><td>${o.orderNumber}</td><td>${formatDate(o.createdAt)}</td><td>${o.items.length}</td><td>${formatMoney(o.total)}</td><td><span class="badge badge--gray">${o.status}</span></td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="admin-modal__actions"><button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+(async () => {
+  const admin = await initAdminPage('customers.html');
+  if (!admin) return;
+  await load();
+})();
+</script>
+</body>
+</html>

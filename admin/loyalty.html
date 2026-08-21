@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fidélité — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header"><div><h1>Programme de fidélité</h1><p>Points crédités uniquement à la livraison, basés sur le numéro de téléphone du client.</p></div></div>
+
+    <div class="admin-grid admin-grid--4" style="margin-bottom:24px;">
+      <div class="stat-card"><p class="stat-card__label">Membres</p><p class="stat-card__value" id="statMembers">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Points émis</p><p class="stat-card__value" id="statIssued">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Points échangés</p><p class="stat-card__value" id="statRedeemed">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Récompenses actives</p><p class="stat-card__value" id="statRewards">—</p></div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:14px;">Règle de calcul des points</h2>
+      <form class="admin-form" id="settingsForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Montant (MAD) pour 1 point</label><input type="number" step="0.01" name="amountPerPoint" required></div>
+          <div class="admin-field" style="justify-content:flex-end;">
+            <label class="admin-checkbox" style="margin-top:24px;"><input type="checkbox" name="isActive"> Programme actif</label>
+          </div>
+        </div>
+        <p class="admin-field-help">Ex. 199 MAD = 1 point → une commande de 398 MAD rapporte 2 points, 249 MAD rapporte environ 1.25 point.</p>
+        <div class="admin-modal__actions" style="justify-content:flex-start;"><button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button></div>
+      </form>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-family:var(--serif);font-size:19px;">Récompenses</h2>
+        <button type="button" class="admin-btn admin-btn--gold admin-btn--small" id="newRewardBtn">+ Nouvelle récompense</button>
+      </div>
+      <div id="rewardsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
+    <div class="admin-card">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:16px;">Clients &amp; historique</h2>
+      <div class="admin-toolbar"><input type="search" id="searchInput" placeholder="Rechercher un client (nom ou téléphone)..."></div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Client</th><th>Téléphone</th><th>Solde de points</th><th></th></tr></thead>
+          <tbody id="customersBody"></tbody>
+        </table>
+        <div class="admin-table__empty" id="emptyState" style="display:none;">Aucun client avec un historique de fidélité pour l'instant.</div>
+      </div>
+    </div>
+  </main>
+</div>
+<style>.editor-row { display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--white); } .editor-row__body { flex:1; }</style>
+<script src="js/admin-shared.js"></script>
+<script>
+let rewards = [];
+let customers = [];
+
+async function loadOverview() {
+  const data = await adminApi('/loyalty/overview');
+  document.getElementById('statMembers').textContent = data.totalMembers;
+  document.getElementById('statIssued').textContent = data.totalPointsIssued;
+  document.getElementById('statRedeemed').textContent = data.totalPointsRedeemed;
+  document.getElementById('statRewards').textContent = data.activeRewards;
+}
+
+async function loadSettings() {
+  const settings = await adminApi('/loyalty/settings');
+  const form = document.getElementById('settingsForm');
+  form.amountPerPoint.value = settings.amountPerPoint;
+  form.isActive.checked = settings.isActive;
+}
+document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await adminApi('/loyalty/settings', { method: 'PUT', body: JSON.stringify({ amountPerPoint: fd.get('amountPerPoint'), isActive: fd.get('isActive') === 'on' }) });
+    toast('Règle de calcul enregistrée.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+function rewardRowHTML(r) {
+  return `
+    <div class="editor-row" data-sortable-id="${r.id}" data-id="${r.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="editor-row__body">
+        <strong>${r.name}</strong> — <span style="color:var(--gray);">${r.pointsRequired} points</span>
+        <div style="font-size:12px;color:var(--gray);">${r.productsIncluded || r.description || ''}${r.redemptionLimit != null ? ` · limite ${r._count.redemptions}/${r.redemptionLimit}` : ''}</div>
+      </div>
+      ${r.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}
+      <div class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="toggle">${r.isActive ? 'Désactiver' : 'Activer'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </div>
+    </div>`;
+}
+
+async function loadRewards() {
+  rewards = await adminApi('/loyalty/rewards');
+  document.getElementById('rewardsList').innerHTML = rewards.length ? rewards.map(rewardRowHTML).join('') : '<p class="admin-field-help">Aucune récompense.</p>';
+}
+
+document.getElementById('rewardsList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('[data-id]').dataset.id;
+  const reward = rewards.find((r) => r.id === id);
+  if (btn.dataset.action === 'edit') openRewardModal(reward);
+  if (btn.dataset.action === 'toggle') { await adminApi(`/loyalty/rewards/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !reward.isActive }) }); await loadRewards(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer la récompense "${reward.name}" ?`);
+    if (!ok) return;
+    try { await adminApi(`/loyalty/rewards/${id}`, { method: 'DELETE' }); toast('Récompense supprimée.'); await loadRewards(); }
+    catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newRewardBtn').addEventListener('click', () => openRewardModal(null));
+
+function openRewardModal(reward) {
+  const isEdit = !!reward;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier la récompense' : 'Nouvelle récompense'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="rewardForm">
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Nom</label><input name="name" required value="${isEdit ? reward.name : ''}"></div>
+          <div class="admin-field"><label>Points requis</label><input type="number" step="0.01" name="pointsRequired" required value="${isEdit ? reward.pointsRequired : ''}"></div>
+        </div>
+        <div class="admin-field"><label>Description</label><textarea name="description">${isEdit ? (reward.description || '') : ''}</textarea></div>
+        <div class="admin-field"><label>Produits inclus (texte libre)</label><input name="productsIncluded" value="${isEdit ? (reward.productsIncluded || '') : ''}" placeholder="ex. 3 parfums au choix"></div>
+        <div class="admin-field"><label>Limite de rédemption (optionnel)</label><input type="number" name="redemptionLimit" value="${isEdit && reward.redemptionLimit != null ? reward.redemptionLimit : ''}"></div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || reward.isActive ? 'checked' : ''}> Active</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('rewardForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name'), pointsRequired: fd.get('pointsRequired'),
+      description: fd.get('description'), productsIncluded: fd.get('productsIncluded'),
+      redemptionLimit: fd.get('redemptionLimit') || null,
+      isActive: fd.get('isActive') === 'on',
+    };
+    try {
+      if (isEdit) await adminApi(`/loyalty/rewards/${reward.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/loyalty/rewards', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Récompense mise à jour.' : 'Récompense créée.');
+      overlay.remove(); await loadRewards();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+function customerRowHTML(c) {
+  return `
+    <tr data-id="${c.id}">
+      <td><strong>${c.fullName}</strong></td>
+      <td>${c.phone}</td>
+      <td>${c.balance}</td>
+      <td class="row-actions"><button data-action="view">Voir le profil</button></td>
+    </tr>`;
+}
+
+async function loadCustomers(search) {
+  customers = await adminApi(`/loyalty/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  document.getElementById('customersBody').innerHTML = customers.map(customerRowHTML).join('');
+  document.getElementById('emptyState').style.display = customers.length ? 'none' : 'block';
+}
+
+let debounceTimer;
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => loadCustomers(e.target.value), 250);
+});
+
+document.getElementById('customersBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  openCustomerModal(id);
+});
+
+async function openCustomerModal(id) {
+  const profile = await adminApi(`/loyalty/customers/${id}`);
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal admin-modal--wide">
+      <div class="admin-modal__header"><h2>${profile.fullName}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <div class="admin-grid admin-grid--3" style="margin-bottom:18px;">
+        <div class="stat-card"><p class="stat-card__label">Solde</p><p class="stat-card__value">${profile.balance}</p></div>
+        <div class="stat-card"><p class="stat-card__label">Commandes livrées</p><p class="stat-card__value">${profile.deliveredCount}/${profile.orderCount}</p></div>
+        <div class="stat-card"><p class="stat-card__label">Prochaine récompense</p><p class="stat-card__value" style="font-size:15px;">${profile.nextReward ? `${profile.nextReward.name} (${profile.nextReward.pointsRequired}pts)` : '—'}</p></div>
+      </div>
+
+      <div class="admin-form__row" style="margin-bottom:18px;">
+        <div class="admin-field">
+          <label>Ajuster manuellement (+ ou -)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="adjustPoints" placeholder="ex. 2 ou -1" style="flex:1;">
+            <button type="button" class="admin-btn admin-btn--small" id="adjustBtn">Appliquer</button>
+          </div>
+        </div>
+        <div class="admin-field">
+          <label>Échanger une récompense</label>
+          <div style="display:flex;gap:8px;">
+            <select id="rewardSelect" style="flex:1;">${profile.availableRewards.map((r) => `<option value="${r.id}">${r.name} (${r.pointsRequired}pts)</option>`).join('') || '<option value="">Aucune récompense accessible</option>'}</select>
+            <button type="button" class="admin-btn admin-btn--gold admin-btn--small" id="redeemBtn" ${profile.availableRewards.length ? '' : 'disabled'}>Échanger</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="stat-card__label" style="margin-bottom:10px;">Historique</p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Date</th><th>Type</th><th>Points</th><th>Note</th></tr></thead>
+          <tbody>
+            ${profile.ledger.length ? profile.ledger.map((l) => `
+              <tr data-ledger-id="${l.id}">
+                <td>${formatDate(l.createdAt)}</td>
+                <td><span class="badge badge--gray">${l.type}</span></td>
+                <td>${l.points > 0 ? '+' : ''}${l.points}</td>
+                <td style="font-size:12px;color:var(--gray);">${l.note || ''}${!l.reversesEntryId && l.type !== 'REVERSED' ? ` <button data-action="reverse" data-id="${l.id}" style="background:none;border:none;color:var(--danger);text-decoration:underline;cursor:pointer;font-size:11px;">annuler</button>` : ''}</td>
+              </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--gray);">Aucun mouvement.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <div class="admin-modal__actions"><button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('adjustBtn').addEventListener('click', async () => {
+    const val = document.getElementById('adjustPoints').value;
+    if (!val) return;
+    try {
+      await adminApi(`/loyalty/customers/${id}/adjust`, { method: 'POST', body: JSON.stringify({ points: val, note: 'Ajustement manuel (admin)' }) });
+      toast('Points ajustés.'); overlay.remove(); openCustomerModal(id); loadOverview(); loadCustomers();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  const redeemBtn = document.getElementById('redeemBtn');
+  if (redeemBtn) {
+    redeemBtn.addEventListener('click', async () => {
+      const rewardId = document.getElementById('rewardSelect').value;
+      if (!rewardId) return;
+      const ok = await confirmDialog('Confirmer l\'échange de cette récompense ?');
+      if (!ok) return;
+      try {
+        await adminApi(`/loyalty/customers/${id}/redeem`, { method: 'POST', body: JSON.stringify({ rewardId }) });
+        toast('Récompense échangée.'); overlay.remove(); openCustomerModal(id); loadOverview(); loadCustomers();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  }
+
+  overlay.querySelectorAll('[data-action="reverse"]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await confirmDialog('Annuler ce mouvement de points ?');
+      if (!ok) return;
+      try {
+        await adminApi(`/loyalty/ledger/${btn.dataset.id}/reverse`, { method: 'POST' });
+        toast('Mouvement annulé.'); overlay.remove(); openCustomerModal(id); loadOverview(); loadCustomers();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('loyalty.html');
+  if (!admin) return;
+  await Promise.all([loadOverview(), loadSettings(), loadRewards(), loadCustomers()]);
+  makeSortable(document.getElementById('rewardsList'), async (orderedIds) => {
+    await adminApi('/loyalty/rewards/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.'); await loadRewards();
+  });
+})();
+</script>
+</body>
+</html>

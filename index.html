@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VEINTUNO HOUSE — The Art of Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="topbar">Livraison offerte partout au Maroc</div>
+
+<header class="header" id="header">
+  <div class="container header__top">
+    <div class="header__zone header__zone--left">
+      <button class="nav-toggle" id="navToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <a href="#accueil" class="logo-mark">XXI</a>
+    </div>
+    <a href="#accueil" class="logo-word">VEINTUNO HOUSE</a>
+    <div class="header__zone header__zone--right">
+      <button type="button" class="icon-btn" id="searchToggle" aria-label="Rechercher">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M21 21 L16.6 16.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="icon-btn cart-toggle" id="cartToggle" aria-label="Ouvrir le panier">
+        <svg viewBox="0 0 24 24"><path d="M4 6h2l1.5 11.5A2 2 0 0 0 9.48 19h8.04a2 2 0 0 0 1.98-1.7L20.5 9H6.2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="22" r="1.4" fill="currentColor"/><circle cx="17" cy="22" r="1.4" fill="currentColor"/></svg>
+        <span class="cart-toggle__badge" id="cartBadge" hidden>0</span>
+      </button>
+    </div>
+  </div>
+  <div class="container header__bottom">
+    <nav class="nav" id="nav">
+      <a href="#accueil">Accueil</a>
+      <div class="nav-dropdown" id="collectionsDropdown">
+        <button type="button" class="nav-dropdown__trigger">Collections <svg viewBox="0 0 24 24" width="10" height="10"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="nav-dropdown__panel" id="collectionsDropdownPanel"></div>
+      </div>
+      <div id="navMenuItems" style="display:contents;"></div>
+      <a href="#pack-chooser" class="nav-cta-link">Composer mon pack</a>
+    </nav>
+  </div>
+
+  <!-- Search overlay -->
+  <div class="search-overlay" id="searchOverlay" hidden>
+    <div class="container search-overlay__inner">
+      <div class="search-overlay__bar">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M21 21 L16.6 16.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <input type="text" id="searchInput" placeholder="Rechercher un parfum, un gel douche, une collection...">
+        <button type="button" id="searchClose" aria-label="Fermer">&times;</button>
+      </div>
+      <div class="search-overlay__results" id="searchResults"></div>
+    </div>
+  </div>
+</header>
+
+<main id="view-home">
+
+  <!-- HERO / SLIDESHOW -->
+  <section class="hero" id="accueil">
+    <div class="hero-slider" id="heroSlider"></div>
+  </section>
+
+  <!-- Dynamic, admin-managed homepage sections -->
+  <div id="homepageSections"></div>
+
+</main>
+
+<!-- COLLECTIONS (page) -->
+<section class="view collections-page" id="view-collections" hidden>
+  <div class="container">
+    <p class="section__eyebrow">La Maison</p>
+    <h2 class="section__title">Nos collections</h2>
+    <div class="collections-page__grid" id="collectionsGrid"></div>
+  </div>
+</section>
+
+<!-- COLLECTION DETAIL (page) -->
+<section class="view collection-detail" id="view-collection-detail" hidden>
+  <div class="container">
+    <a href="#collections" class="collection-detail__back">← Toutes les collections</a>
+    <p class="section__eyebrow" id="collectionDetailEyebrow">Collection</p>
+    <h2 class="section__title" id="collectionDetailTitle">Parfums</h2>
+
+    <div class="collection-detail__packs" id="collectionDetailPacks" hidden></div>
+
+    <div class="gender-filter" id="genderFilter" hidden>
+      <div class="gender-filter__chip is-active" data-gender="">Tous</div>
+      <div class="gender-filter__chip" data-gender="homme">Homme</div>
+      <div class="gender-filter__chip" data-gender="femme">Femme</div>
+      <div class="gender-filter__chip" data-gender="unisexe">Unisexe</div>
+    </div>
+
+    <div class="products__grid" id="collectionDetailGrid"></div>
+  </div>
+</section>
+
+<!-- PRODUCT DETAIL (page) -->
+<section class="view product-detail" id="view-product-detail" hidden>
+  <div class="container product-detail__layout" id="productDetailLayout">
+    <div class="product-detail__visual" id="productDetailVisual"></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer" id="contact">
+  <div class="container footer__inner">
+    <div class="footer__brand">
+      <a href="#accueil" class="logo logo--footer">XXI<span>VEINTUNO</span> HOUSE</a>
+      <p>The Art of Memory</p>
+    </div>
+    <div class="footer__col">
+      <h4>Navigation</h4>
+      <a href="#accueil">Accueil</a>
+      <a href="#collections">Collections</a>
+      <a href="#maison">La Maison</a>
+      <a href="#packs">Packs</a>
+    </div>
+    <div class="footer__col">
+      <h4>Informations</h4>
+      <a href="#">Livraison &amp; retours</a>
+      <a href="#">Conditions générales</a>
+      <a href="#">Politique de confidentialité</a>
+    </div>
+    <div class="footer__col">
+      <h4>Nous suivre</h4>
+      <a href="#">Instagram</a>
+      <a href="#">WhatsApp</a>
+    </div>
+  </div>
+  <div class="footer__bottom container">
+    <p>© 2026 VEINTUNO HOUSE. Tous droits réservés.</p>
+  </div>
+</footer>
+
+<!-- PACK CHOOSER (entry point for "Composer mon pack") -->
+<div class="pack-modal" id="packChooserModal" aria-hidden="true">
+  <div class="pack-modal__backdrop" id="packChooserBackdrop"></div>
+  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="packChooserTitle">
+    <div class="pack-modal__header">
+      <div>
+        <p class="section__eyebrow" id="packChooserEyebrow">Composer mon pack</p>
+        <h2 id="packChooserTitle">Choisissez votre formule</h2>
+      </div>
+      <button type="button" class="pack-modal__close" id="packChooserClose" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="pack-modal__body">
+      <div class="chooser-step" id="chooserStepFormula"></div>
+      <div class="chooser-step" id="chooserStepType" hidden>
+        <button type="button" class="collection-detail__back" id="chooserBackToFormula">← Changer de formule</button>
+        <div class="chooser-grid" id="chooserTypeGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- QUICK VIEW -->
+<div class="pack-modal" id="quickViewModal" aria-hidden="true">
+  <div class="pack-modal__backdrop" id="quickViewBackdrop"></div>
+  <div class="pack-modal__panel" role="dialog" aria-modal="true" style="max-width:760px;">
+    <div class="pack-modal__header">
+      <div><p class="section__eyebrow">Aperçu rapide</p><h2 id="quickViewName">Produit</h2></div>
+      <button type="button" class="pack-modal__close" id="quickViewClose" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="pack-modal__body">
+      <div class="product-detail__layout product-detail__layout--compact" id="quickViewBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPOSER DE PACK -->
+<div class="pack-modal" id="packModal" aria-hidden="true">
+  <div class="pack-modal__backdrop" id="packModalBackdrop"></div>
+  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="packModalTitle">
+
+    <div class="pack-modal__header">
+      <div>
+        <p class="section__eyebrow" id="packModalEyebrow">Composez votre pack</p>
+        <h2 id="packModalTitle">Pack Signature</h2>
+      </div>
+      <button type="button" class="pack-modal__close" id="packModalClose" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+
+    <div class="pack-modal__progress">
+      <div class="pack-modal__progress-text">
+        <span id="packModalCount">0</span> parfum(s) sur <span id="packModalTotal">4</span> sélectionné(s)
+      </div>
+      <div class="pack-modal__progress-bar">
+        <div class="pack-modal__progress-fill" id="packModalFill"></div>
+      </div>
+    </div>
+
+    <div class="pack-modal__body" id="packModalBody">
+      <div class="pack-modal__grid" id="packModalGrid"></div>
+
+      <div class="pack-modal__success" id="packModalSuccess" hidden>
+        <div class="pack-modal__success-icon">
+          <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Pack ajouté au panier</h3>
+        <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
+        <ul class="pack-modal__success-list" id="packModalSuccessList"></ul>
+        <button type="button" class="btn btn--outline" id="packModalViewCart">Voir mon panier</button>
+      </div>
+    </div>
+
+    <div class="pack-modal__footer">
+      <div class="pack-modal__recap" id="packModalRecap">
+        <span class="pack-modal__recap-empty">Aucun parfum sélectionné</span>
+      </div>
+      <button type="button" class="btn btn--gold" id="packModalCta" disabled>Ajouter au panier</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- FREE PACK BUILDER -->
+<div class="pack-modal" id="freePackModal" aria-hidden="true">
+  <div class="pack-modal__backdrop" id="freePackModalBackdrop"></div>
+  <div class="pack-modal__panel" role="dialog" aria-modal="true" aria-labelledby="freePackModalTitle">
+
+    <div class="pack-modal__header">
+      <div>
+        <p class="section__eyebrow" id="freePackModalEyebrow">Choisissez vos produits</p>
+        <h2 id="freePackModalTitle">FREE PACK</h2>
+      </div>
+      <button type="button" class="pack-modal__close" id="freePackModalClose" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+
+    <div class="pack-modal__progress">
+      <div class="pack-modal__progress-text" id="freePackModalProgressText">0/3</div>
+      <div class="pack-modal__progress-bar">
+        <div class="pack-modal__progress-fill" id="freePackModalFill"></div>
+      </div>
+    </div>
+
+    <div class="pack-modal__body" id="freePackModalBody">
+      <div class="pack-modal__grid" id="freePackModalGrid"></div>
+
+      <div class="pack-modal__success" id="freePackModalSuccess" hidden>
+        <div class="pack-modal__success-icon">
+          <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Free Pack ajouté au panier</h3>
+        <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
+        <ul class="pack-modal__success-list" id="freePackModalSuccessList"></ul>
+        <button type="button" class="btn btn--outline" id="freePackModalViewCart">Voir mon panier</button>
+      </div>
+    </div>
+
+    <div class="pack-modal__footer">
+      <div class="pack-modal__recap" id="freePackModalRecap">
+        <span class="pack-modal__recap-empty">Aucun produit sélectionné</span>
+      </div>
+      <button type="button" class="btn btn--gold" id="freePackModalCta" disabled>Ajouter au panier</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- PANIER -->
+<div class="cart-drawer" id="cartDrawer" aria-hidden="true">
+  <div class="cart-drawer__backdrop" id="cartBackdrop"></div>
+  <aside class="cart-drawer__panel" role="dialog" aria-modal="true" aria-label="Panier">
+
+    <!-- Step: Panier -->
+    <div class="cart-step" id="cartStepBag">
+      <div class="cart-drawer__header">
+        <h2>Votre panier</h2>
+        <button type="button" class="pack-modal__close" id="cartClose" aria-label="Fermer">
+          <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+      </div>
+      <div class="cart-drawer__items" id="cartItems"></div>
+      <div class="cart-drawer__footer">
+        <div class="cart-drawer__promo">
+          <input type="text" id="promoInput" placeholder="Code promo">
+          <button type="button" class="btn btn--outline" id="promoApplyBtn">Appliquer</button>
+        </div>
+        <p class="cart-drawer__promo-msg" id="promoMsg"></p>
+        <div class="cart-drawer__subtotal cart-drawer__subtotal--line">
+          <span>Sous-total</span>
+          <span id="cartSubtotal">0 MAD</span>
+        </div>
+        <div class="cart-drawer__subtotal cart-drawer__subtotal--line" id="cartDiscountRow" hidden>
+          <span>Réduction</span>
+          <span id="cartDiscount">0 MAD</span>
+        </div>
+        <div class="cart-drawer__subtotal">
+          <span>Total</span>
+          <span id="cartTotal">0 MAD</span>
+        </div>
+        <button type="button" class="btn btn--gold btn--full" id="cartCheckoutBtn" disabled>Passer la commande</button>
+      </div>
+    </div>
+
+    <!-- Step: Checkout -->
+    <div class="cart-step" id="cartStepCheckout" hidden>
+      <div class="cart-drawer__header">
+        <button type="button" class="cart-drawer__back" id="cartBackToBag" aria-label="Retour au panier">←</button>
+        <h2>Vos informations</h2>
+        <button type="button" class="pack-modal__close" id="cartCloseFromCheckout" aria-label="Fermer">
+          <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+      </div>
+      <form class="checkout-form" id="checkoutForm">
+        <label>
+          <span>Nom complet</span>
+          <input type="text" name="fullName" required autocomplete="name" placeholder="ex. Yassine El Amrani">
+        </label>
+        <label>
+          <span>Adresse complète</span>
+          <input type="text" name="address" required autocomplete="street-address" placeholder="Rue, quartier, n°...">
+        </label>
+        <label>
+          <span>Ville</span>
+          <input type="text" name="city" required autocomplete="address-level2" placeholder="ex. Casablanca">
+        </label>
+        <label>
+          <span>Téléphone</span>
+          <input type="tel" name="phone" required autocomplete="tel" placeholder="06 00 00 00 00">
+        </label>
+        <div id="checkoutError" class="checkout-form__error" hidden></div>
+        <div class="checkout-form__summary">
+          <span>Total à payer à la livraison</span>
+          <span id="checkoutSubtotal">0 MAD</span>
+        </div>
+        <button type="submit" class="btn btn--gold btn--full" id="checkoutSubmitBtn">Confirmer la commande</button>
+      </form>
+    </div>
+
+    <!-- Step: Confirmation -->
+    <div class="cart-step" id="cartStepSuccess" hidden>
+      <div class="cart-drawer__header">
+        <h2>Commande confirmée</h2>
+        <button type="button" class="pack-modal__close" id="cartCloseFromSuccess" aria-label="Fermer">
+          <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+      </div>
+      <div class="pack-modal__success">
+        <div class="pack-modal__success-icon">
+          <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Merci, <span id="successCustomerName">votre commande</span> !</h3>
+        <p>Commande <strong id="successOrderNumber"></strong> — notre équipe vous appellera pour confirmer la livraison. Paiement à la livraison.</p>
+        <ul class="pack-modal__success-list" id="successOrderList"></ul>
+        <button type="button" class="btn btn--outline" id="cartContinueShopping">Continuer mes achats</button>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>

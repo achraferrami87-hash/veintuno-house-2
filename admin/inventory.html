@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header"><div><h1>Gestion du stock</h1><p>Suivez les niveaux de stock et ajustez-les manuellement.</p></div></div>
+
+    <div class="admin-grid admin-grid--3" style="margin-bottom:24px;">
+      <div class="stat-card"><p class="stat-card__label">Références</p><p class="stat-card__value" id="statTotal">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Stock faible</p><p class="stat-card__value" id="statLow">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Rupture de stock</p><p class="stat-card__value" id="statOut">—</p></div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Produit</th><th>Collection</th><th>Stock</th><th>Seuil d'alerte</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="inventoryBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let inventory = [];
+
+function statusBadge(item) {
+  if (item.isOutOfStock) return '<span class="badge badge--red">Rupture</span>';
+  if (item.isLowStock) return '<span class="badge badge--gold">Stock faible</span>';
+  return '<span class="badge badge--green">OK</span>';
+}
+
+function rowHTML(item) {
+  return `
+    <tr data-id="${item.id}">
+      <td><strong>${item.name}</strong></td>
+      <td>${item.collection ? item.collection.name : '—'}</td>
+      <td>${item.stock}</td>
+      <td>${item.lowStockThreshold}</td>
+      <td>${statusBadge(item)}</td>
+      <td class="row-actions"><button data-action="adjust">Ajuster</button><button data-action="history">Historique</button></td>
+    </tr>`;
+}
+
+async function load() {
+  inventory = await adminApi('/inventory');
+  document.getElementById('inventoryBody').innerHTML = inventory.map(rowHTML).join('');
+  document.getElementById('statTotal').textContent = inventory.length;
+  document.getElementById('statLow').textContent = inventory.filter((p) => p.isLowStock).length;
+  document.getElementById('statOut').textContent = inventory.filter((p) => p.isOutOfStock).length;
+}
+
+document.getElementById('inventoryBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const item = inventory.find((i) => i.id === id);
+  if (btn.dataset.action === 'adjust') openAdjustModal(item);
+  if (btn.dataset.action === 'history') openHistoryModal(item);
+});
+
+function openAdjustModal(item) {
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>Ajuster le stock — ${item.name}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <p style="margin-bottom:16px;color:var(--gray);font-size:13px;">Stock actuel : <strong>${item.stock}</strong></p>
+      <form class="admin-form" id="adjustForm">
+        <div class="admin-field"><label>Ajustement (ex. -5 ou +20)</label><input type="number" name="amount" required></div>
+        <div class="admin-field"><label>Raison</label><input name="reason" placeholder="ex. Réassort fournisseur"></div>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">Appliquer</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('adjustForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await adminApi(`/inventory/${item.id}/adjust`, { method: 'POST', body: JSON.stringify({ amount: fd.get('amount'), reason: fd.get('reason') }) });
+      toast('Stock ajusté.');
+      overlay.remove();
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+async function openHistoryModal(item) {
+  const logs = await adminApi(`/inventory/${item.id}/logs`);
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>Historique — ${item.name}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Date</th><th>Changement</th><th>Raison</th><th>Résultat</th></tr></thead>
+          <tbody>
+            ${logs.length ? logs.map((l) => `<tr><td>${formatDate(l.createdAt)}</td><td>${l.changeAmount > 0 ? '+' : ''}${l.changeAmount}</td><td>${l.reason}</td><td>${l.resultingStock}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--gray);">Aucun mouvement.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <div class="admin-modal__actions"><button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+(async () => {
+  const admin = await initAdminPage('inventory.html');
+  if (!admin) return;
+  await load();
+})();
+</script>
+</body>
+</html>
