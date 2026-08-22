@@ -21,6 +21,10 @@
       <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;">Contact</h2>
       <form class="admin-form" id="settingsForm">
         <div class="admin-field">
+          <label>Texte de la barre d'annonce (haut du site)</label>
+          <input name="announcementText" placeholder="Livraison offerte partout au Maroc">
+        </div>
+        <div class="admin-field">
           <label>Numéro ou lien WhatsApp</label>
           <input name="whatsappNumber" placeholder="ex. +212600000000 ou https://wa.me/212600000000">
           <p class="admin-field-help">Un numéro seul est automatiquement transformé en lien de discussion WhatsApp.</p>
@@ -60,6 +64,7 @@
 async function load() {
   const settings = await adminApi('/settings');
   const form = document.getElementById('settingsForm');
+  form.announcementText.value = settings.announcementText || '';
   form.whatsappNumber.value = settings.whatsappNumber || '';
   form.instagramLink.value = settings.instagramLink || '';
   form.perfumeDisclaimer.value = settings.perfumeDisclaimer || '';
@@ -86,6 +91,7 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
   e.preventDefault();
   const fd = new FormData(e.target);
   const payload = {
+    announcementText: fd.get('announcementText'),
     whatsappNumber: fd.get('whatsappNumber'),
     instagramLink: fd.get('instagramLink'),
     instagramQrImage: fd.get('instagramQrImage'),

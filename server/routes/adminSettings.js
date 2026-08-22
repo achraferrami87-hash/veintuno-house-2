@@ -24,6 +24,9 @@ router.put('/', async (req, res) => {
   if (body.defaultTheme === 'clair' || body.defaultTheme === 'sombre') {
     data.defaultTheme = body.defaultTheme;
   }
+  if (body.announcementText !== undefined && body.announcementText !== '') {
+    data.announcementText = body.announcementText;
+  }
 
   const updated = await prisma.siteSettings.update({ where: { id: settings.id }, data });
   res.json(updated);

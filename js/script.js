@@ -1091,16 +1091,16 @@ async function renderComposeFree(container) {
     <a href="#compose" class="collection-detail__back">← Changer de formule</a>
     <p class="section__eyebrow">${config.name}</p>
     <h2 class="section__title">Choisissez vos produits</h2>
-    <p class="admin-field-help" id="composeFreePriceHint" style="margin-bottom:14px;">Atteignez ${config.priceThreshold} MAD de produits pour bénéficier du prix fixe à ${config.flatPrice} MAD.</p>
+    <p class="admin-field-help" id="composeFreePriceHint" style="margin-bottom:14px;">Chaque parfum coûte ${config.perfumePrice} MAD, chaque gel douche coûte ${config.gelDouchePrice} MAD — le prix s'additionne pour chaque produit choisi.</p>
     <div id="composeFreeProgress"></div>
     <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
       ${config.eligibleProducts.map((p) => `
-        <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.price}" data-collection="${p.collectionId}">
+        <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}">
           <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <div class="product-card__bottle">${productMediaHTML(p)}</div>
           <h3>${p.name}</h3>
           <p class="product-card__notes">${p.notes || ''}</p>
-          <p class="product-card__price">${p.price} MAD</p>
+          <p class="product-card__price">${p.freePackPrice} MAD</p>
         </button>`).join('')}
     </div>
     <div class="compose-success" id="composeFreeSuccess" hidden></div>
@@ -1141,21 +1141,15 @@ async function renderComposeFree(container) {
         chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
       });
     }
-    const rawTotal = selected.reduce((s, i) => s + i.price, 0);
-    const price = computeFreePackPrice(rawTotal);
+    // Per-item pricing: each selected product already carries its own Free
+    // Pack price (perfume vs gel douche) — the total is a plain sum, never a
+    // flat price for the whole pack. Mirrors resolveItemsPricing (public.js).
+    const price = selected.reduce((s, i) => s + i.price, 0);
     cta.disabled = selected.length < config.minItems;
-    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${price} MAD`;
-    if (priceHint) {
-      priceHint.textContent = rawTotal >= config.priceThreshold
-        ? `Prix fixe ${config.flatPrice} MAD appliqué (au lieu de ${rawTotal} MAD) — seuil de ${config.priceThreshold} MAD atteint.`
-        : `Ajoutez encore ${(config.priceThreshold - rawTotal).toFixed(2)} MAD de produits pour bénéficier du prix fixe à ${config.flatPrice} MAD.`;
+    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${price.toFixed(2)} MAD`;
+    if (priceHint && selected.length > 0) {
+      priceHint.textContent = `${selected.length} produit(s) sélectionné(s) — total : ${price.toFixed(2)} MAD.`;
     }
-  }
-
-  // Mirrors the server's threshold rule in resolveItemsPricing (public.js):
-  // below the threshold, normal individual pricing applies — no discount.
-  function computeFreePackPrice(rawTotal) {
-    return rawTotal >= config.priceThreshold ? config.flatPrice : rawTotal;
   }
 
   function toggleCard(slug) {
@@ -1178,8 +1172,7 @@ async function renderComposeFree(container) {
 
   cta.addEventListener('click', () => {
     if (cta.disabled) return;
-    const rawTotal = selected.reduce((s, i) => s + i.price, 0);
-    const price = computeFreePackPrice(rawTotal);
+    const price = selected.reduce((s, i) => s + i.price, 0);
     Cart.addFreePack(config.name, price, selected.map((s) => s.slug), selected.map((s) => s.name));
     grid.hidden = true;
     bar.hidden = true;
@@ -1273,9 +1266,145 @@ async function renderReceipt(container, orderNumber, phone) {
         <p class="receipt-doc__total"><span>Total</span><span>${receipt.total} MAD</span></p>
       </div>
     </div>
-    <button type="button" class="btn btn--gold" id="receiptPrintBtn">Imprimer / Télécharger (PDF)</button>`;
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button type="button" class="btn btn--gold" id="receiptPrintBtn">Imprimer / Télécharger (PDF)</button>
+      <button type="button" class="btn btn--outline" id="receiptPngBtn">Télécharger le reçu (PNG)</button>
+    </div>`;
 
   document.getElementById('receiptPrintBtn').addEventListener('click', () => window.print());
+  document.getElementById('receiptPngBtn').addEventListener('click', () => downloadReceiptAsPNG(receipt));
+}
+
+// Draws the receipt onto an offscreen canvas and downloads it as a PNG —
+// a self-contained image a customer can save/share, independent of print/PDF.
+async function downloadReceiptAsPNG(receipt) {
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* ignore */ } }
+
+  const width = 900;
+  const padX = 60;
+  const lineH = 30;
+  const itemsH = receipt.items.length * (lineH * 2 + 10);
+  const height = 620 + itemsH;
+
+  const canvas = document.createElement('canvas');
+  const scale = 2; // render at 2x for a crisp, high-resolution download
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  let y = 70;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#0c0c0c';
+  ctx.font = '600 30px "Cormorant Garamond", Georgia, serif';
+  ctx.fillText('XXI VEINTUNO HOUSE', width / 2, y);
+  y += 28;
+  ctx.font = '400 11px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#8a8578';
+  ctx.letterSpacing = '2px';
+  ctx.fillText('REÇU DE COMMANDE', width / 2, y);
+  ctx.letterSpacing = '0px';
+
+  y += 24;
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(width - padX, y); ctx.stroke();
+
+  y += 40;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0c0c0c';
+  ctx.font = '600 14px "Inter", Arial, sans-serif';
+  ctx.fillText(`Commande ${receipt.orderNumber}`, padX, y);
+  ctx.textAlign = 'right';
+  ctx.font = '400 13px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#555';
+  ctx.fillText(new Date(receipt.createdAt).toLocaleDateString('fr-FR'), width - padX, y);
+
+  y += 26;
+  ctx.textAlign = 'left';
+  ctx.font = '400 13px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#555';
+  ctx.fillText(`Statut : ${receipt.status}`, padX, y);
+
+  y += 34;
+  ctx.font = '600 14px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#0c0c0c';
+  ctx.fillText(receipt.fullName, padX, y);
+  y += 20;
+  ctx.font = '400 13px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#555';
+  ctx.fillText(`${receipt.address}, ${receipt.city}`, padX, y);
+  y += 20;
+  ctx.fillText(receipt.phone, padX, y);
+
+  y += 34;
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(width - padX, y); ctx.stroke();
+
+  y += 30;
+  receipt.items.forEach((item) => {
+    ctx.textAlign = 'left';
+    ctx.font = '600 14px "Inter", Arial, sans-serif';
+    ctx.fillStyle = '#0c0c0c';
+    ctx.fillText(item.name, padX, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${(item.unitPrice * item.quantity).toFixed(2)} MAD`, width - padX, y);
+    y += 20;
+    ctx.textAlign = 'left';
+    ctx.font = '400 12px "Inter", Arial, sans-serif';
+    ctx.fillStyle = '#8a8578';
+    const detail = (item.detail || (item.components || []).join(', ') || '').slice(0, 90);
+    ctx.fillText(`${detail}${detail ? ' — ' : ''}Qté ${item.quantity}`, padX, y);
+    y += lineH;
+  });
+
+  y += 10;
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(width - padX, y); ctx.stroke();
+  y += 30;
+
+  const totalsLineWidth = 320;
+  const totalsX = width - padX - totalsLineWidth;
+  function totalsLine(label, value, bold) {
+    ctx.textAlign = 'left';
+    ctx.font = `${bold ? '600' : '400'} 13px "Inter", Arial, sans-serif`;
+    ctx.fillStyle = bold ? '#0c0c0c' : '#555';
+    ctx.fillText(label, totalsX, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(value, width - padX, y);
+    y += 24;
+  }
+  totalsLine('Sous-total', `${receipt.subtotal} MAD`);
+  if (receipt.discountAmount > 0) totalsLine(`Réduction${receipt.promoCode ? ` (${receipt.promoCode})` : ''}`, `-${receipt.discountAmount} MAD`);
+  if (receipt.deliveryFee > 0) totalsLine('Livraison', `${receipt.deliveryFee} MAD`);
+  if (receipt.pointsEarned > 0) totalsLine('Points fidélité gagnés', `+${receipt.pointsEarned}`);
+  if (receipt.pointsRedeemed > 0) totalsLine('Points fidélité utilisés', `-${receipt.pointsRedeemed}`);
+  y += 6;
+  ctx.textAlign = 'left';
+  ctx.font = '600 18px "Cormorant Garamond", Georgia, serif';
+  ctx.fillStyle = '#0c0c0c';
+  ctx.fillText('Total', totalsX, y);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${receipt.total} MAD`, width - padX, y);
+
+  ctx.textAlign = 'center';
+  ctx.font = '400 11px "Inter", Arial, sans-serif';
+  ctx.fillStyle = '#8a8578';
+  ctx.fillText('Merci pour votre confiance — VEINTUNO HOUSE', width / 2, height - 30);
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recu-${receipt.orderNumber}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, 'image/png');
 }
 
 // ===========================
@@ -1612,6 +1741,13 @@ async function getSiteSettings() {
     siteSettingsCache = await api('/settings');
     return siteSettingsCache;
   } catch (e) { return null; }
+}
+
+async function initAnnouncementBar() {
+  const bar = document.getElementById('announcementBar');
+  if (!bar) return;
+  const settings = await getSiteSettings();
+  if (settings && settings.announcementText) bar.textContent = settings.announcementText;
 }
 
 function whatsappHref(numberOrLink) {
@@ -2027,3 +2163,4 @@ initSearch();
 initLoyaltyPage();
 initContactPage();
 initThemeSwitch();
+initAnnouncementBar();

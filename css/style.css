@@ -3,8 +3,8 @@
   --off-black: #161513;
   --white: #ffffff;
   --cream: #f6f3ec;
-  --gold: #C9A227;
-  --gold-light: #e6c15c;
+  --gold: #D4AF37;
+  --gold-light: #C5A059;
   --gray: #8a8578;
   --serif: 'Cormorant Garamond', 'Playfair Display', serif;
   --sans: 'Inter', 'Poppins', sans-serif;
@@ -49,7 +49,16 @@ em { font-style: italic; color: var(--gold); }
   transition: all 0.3s ease;
   text-align: center;
 }
-.btn--gold { background: var(--gold); border-color: var(--gold); color: var(--black); }
+.btn--gold {
+  background: var(--gold); border-color: var(--gold); color: var(--black);
+  position: relative; overflow: hidden; z-index: 0;
+}
+.btn--gold::before {
+  content: ''; position: absolute; top: 0; left: -130%; width: 60%; height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
+  transform: skewX(-20deg); transition: left 0.7s ease; z-index: 1; pointer-events: none;
+}
+.btn--gold:hover::before { left: 130%; }
 .btn--gold:hover { background: var(--gold-light); border-color: var(--gold-light); }
 .btn--outline { background: transparent; border-color: var(--black); color: var(--black); }
 .btn--outline:hover { background: var(--black); color: var(--white); }
@@ -296,9 +305,10 @@ em { font-style: italic; color: var(--gold); }
   padding: 30px 24px 34px;
   text-align: center;
   position: relative;
-  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  border: 1px solid transparent;
+  transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
-.product-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba(0,0,0,0.1); }
+.product-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(0,0,0,0.09); border-color: rgba(212,175,55,0.25); }
 .product-card__bottle { display: block; overflow: hidden; }
 .product-card__bottle img { width: 100%; height: 100%; object-fit: contain; display: block; transition: transform 0.5s ease; }
 .product-card:hover .product-card__bottle img { transform: scale(1.06); }
@@ -962,7 +972,7 @@ em { font-style: italic; color: var(--gold); }
   border-bottom: 1px solid rgba(0,0,0,0.2);
   background: transparent;
   color: var(--black);
-  transition: border-color 0.25s ease;
+  transition: border-color 0.35s ease;
 }
 .checkout-form input:focus { outline: none; border-bottom-color: var(--gold); }
 .checkout-form input::placeholder { color: rgba(0,0,0,0.3); }
@@ -1005,7 +1015,7 @@ em { font-style: italic; color: var(--gold); }
   border: 1px solid rgba(0,0,0,0.2);
   background: transparent;
 }
-.cart-drawer__promo input:focus { outline: none; border-color: var(--gold); }
+.cart-drawer__promo input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(212,175,55,0.12); }
 .cart-drawer__promo .btn { padding: 11px 18px; font-size: 11px; white-space: nowrap; }
 .cart-drawer__promo-msg { font-size: 12px; margin-bottom: 14px; min-height: 14px; }
 .cart-drawer__promo-msg--ok { color: #3a7a4a; }
@@ -1237,7 +1247,7 @@ a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba
   font-family: var(--sans); font-size: 15px; padding: 12px 14px;
   border: 1px solid rgba(0,0,0,0.15); background: var(--white);
 }
-.loyalty-form input:focus { outline: none; border-color: var(--gold); }
+.loyalty-form input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(212,175,55,0.12); }
 .loyalty-result { margin-top: 30px; padding-top: 30px; border-top: 1px solid rgba(0,0,0,0.1); }
 .loyalty-result__points { font-family: var(--serif); font-size: 46px; font-weight: 600; color: var(--gold); }
 .loyalty-result__points span { font-size: 16px; font-weight: 400; color: var(--black); }
@@ -1307,7 +1317,7 @@ a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba
   font-family: var(--sans); font-size: 15px; padding: 12px 14px;
   border: 1px solid rgba(0,0,0,0.15); background: var(--white); color: var(--black);
 }
-.admin-field input:focus, .admin-field textarea:focus, .admin-field select:focus { outline: none; border-color: var(--gold); }
+.admin-field input:focus, .admin-field textarea:focus, .admin-field select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(212,175,55,0.12); }
 .admin-field-help { font-size: 13px; color: var(--gray); }
 
 /* ===========================
@@ -1443,7 +1453,7 @@ input.is-invalid { border-color: #a13333 !important; }
 /* ===========================
    Micro-interactions / general premium polish
 =========================== */
-.btn { transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.2s ease; }
+.btn { transition: background 0.35s ease, color 0.35s ease, border-color 0.35s ease, transform 0.2s ease; }
 .btn:active { transform: scale(0.97); }
 a { transition: color 0.2s ease; }
 .chooser-card, .pack-card, .contact-card, .loyalty-card, .bundle-card, .review-item {

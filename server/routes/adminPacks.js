@@ -115,6 +115,8 @@ router.put('/free-pack/config', async (req, res) => {
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
   if (body.priceThreshold !== undefined) data.priceThreshold = Number(body.priceThreshold);
   if (body.flatPrice !== undefined) data.flatPrice = Number(body.flatPrice);
+  if (body.perfumePrice !== undefined) data.perfumePrice = Number(body.perfumePrice);
+  if (body.gelDouchePrice !== undefined) data.gelDouchePrice = Number(body.gelDouchePrice);
 
   await prisma.freePackConfig.update({ where: { id: config.id }, data });
 

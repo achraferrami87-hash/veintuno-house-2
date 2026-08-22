@@ -131,11 +131,15 @@ model FreePackConfig {
   name               String   @default("FREE PACK")
   minItems           Int      @default(3)
   allowMixCategories Boolean  @default(true)
-  // Flat-price rule: if the selected products' combined value reaches
-  // priceThreshold, the customer pays flatPrice instead of the sum.
-  // Below the threshold, normal individual pricing applies (no discount).
+  // Legacy threshold/flat-total rule — superseded by the per-item pricing
+  // below, kept only so no historical data is lost.
   priceThreshold     Float    @default(150)
   flatPrice          Float    @default(66.34)
+  // Per-item Free Pack pricing: each selected item is priced individually
+  // based on its category — a perfume always costs perfumePrice, a gel
+  // douche always costs gelDouchePrice, regardless of how many are picked.
+  perfumePrice       Float    @default(66.34)
+  gelDouchePrice     Float    @default(79)
   isActive           Boolean  @default(true)
   updatedAt          DateTime @updatedAt
 
@@ -475,5 +479,6 @@ model SiteSettings {
   instagramQrImage  String?
   perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
   defaultTheme      String   @default("clair") // clair | sombre — the visitor's own choice (localStorage) still overrides this
+  announcementText  String   @default("Livraison offerte partout au Maroc")
   updatedAt         DateTime @updatedAt
 }

@@ -37,10 +37,10 @@
           <div class="admin-field"><label>Minimum de produits</label><input type="number" name="minItems" min="1" required></div>
         </div>
         <div class="admin-form__row">
-          <div class="admin-field"><label>Seuil de prix (MAD) — au-delà, prix fixe appliqué</label><input type="number" step="0.01" name="priceThreshold" required></div>
-          <div class="admin-field"><label>Prix fixe (MAD) une fois le seuil atteint</label><input type="number" step="0.01" name="flatPrice" required></div>
+          <div class="admin-field"><label>Prix par parfum (MAD)</label><input type="number" step="0.01" name="perfumePrice" required></div>
+          <div class="admin-field"><label>Prix par gel douche (MAD)</label><input type="number" step="0.01" name="gelDouchePrice" required></div>
         </div>
-        <p style="color:var(--gray);font-size:12px;margin:-8px 0 12px;">Si la valeur totale des parfums sélectionnés atteint le seuil, le client paie le prix fixe. En dessous du seuil, les prix individuels normaux s'appliquent (pas de réduction).</p>
+        <p style="color:var(--gray);font-size:12px;margin:-8px 0 12px;">Chaque parfum sélectionné dans le Free Pack coûte ce prix, chaque gel douche coûte son propre prix — ce n'est jamais un prix fixe unique pour tout le pack. Ex. 3 parfums = 3 × prix par parfum.</p>
         <label class="admin-checkbox"><input type="checkbox" name="allowMixCategories"> Autoriser le mélange entre différentes collections</label>
         <label class="admin-checkbox"><input type="checkbox" name="isActive"> Actif sur le site</label>
         <div class="admin-field">
@@ -180,8 +180,8 @@ async function loadFreePack() {
   const form = document.getElementById('freePackForm');
   form.name.value = config.name;
   form.minItems.value = config.minItems;
-  form.priceThreshold.value = config.priceThreshold;
-  form.flatPrice.value = config.flatPrice;
+  form.perfumePrice.value = config.perfumePrice;
+  form.gelDouchePrice.value = config.gelDouchePrice;
   form.allowMixCategories.checked = config.allowMixCategories;
   form.isActive.checked = config.isActive;
 
@@ -200,7 +200,7 @@ async function loadFreePack() {
     const fd = new FormData(form);
     const payload = {
       name: fd.get('name'), minItems: fd.get('minItems'),
-      priceThreshold: fd.get('priceThreshold'), flatPrice: fd.get('flatPrice'),
+      perfumePrice: fd.get('perfumePrice'), gelDouchePrice: fd.get('gelDouchePrice'),
       allowMixCategories: fd.get('allowMixCategories') === 'on',
       isActive: fd.get('isActive') === 'on',
       eligibleCollectionIds: Array.from(document.querySelectorAll('#freePackCollections input:checked')).map((el) => el.value),

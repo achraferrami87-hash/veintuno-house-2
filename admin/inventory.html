@@ -10,7 +10,7 @@
 <body>
 <div class="admin-shell" id="adminShell">
   <main class="admin-main">
-    <div class="admin-header"><div><h1>Gestion du stock</h1><p>Suivez les niveaux de stock et ajustez-les manuellement.</p></div></div>
+    <div class="admin-header"><div><h1>Gestion du stock</h1><p>Suivez les niveaux de stock, filtrez par collection/statut, et ajustez rapidement.</p></div></div>
 
     <div class="admin-grid admin-grid--3" style="margin-bottom:24px;">
       <div class="stat-card"><p class="stat-card__label">Références</p><p class="stat-card__value" id="statTotal">—</p></div>
@@ -18,11 +18,39 @@
       <div class="stat-card"><p class="stat-card__label">Rupture de stock</p><p class="stat-card__value" id="statOut">—</p></div>
     </div>
 
+    <div class="admin-toolbar">
+      <input type="search" id="searchInput" placeholder="Rechercher un produit...">
+      <select id="collectionFilter"><option value="">Toutes les collections</option></select>
+      <select id="stockFilter">
+        <option value="">Stock : tous</option>
+        <option value="in">En stock</option>
+        <option value="low">Stock faible</option>
+        <option value="out">Rupture de stock</option>
+      </select>
+      <select id="activeFilter">
+        <option value="">Statut : tous</option>
+        <option value="active">Actif</option>
+        <option value="inactive">Inactif</option>
+      </select>
+      <select id="sortBy">
+        <option value="stock-asc">Trier : stock croissant</option>
+        <option value="stock-desc">Trier : stock décroissant</option>
+        <option value="name-asc">Trier : nom (A→Z)</option>
+        <option value="name-desc">Trier : nom (Z→A)</option>
+        <option value="price-asc">Trier : prix croissant</option>
+        <option value="price-desc">Trier : prix décroissant</option>
+        <option value="newest">Trier : plus récents</option>
+        <option value="oldest">Trier : plus anciens</option>
+      </select>
+      <button type="button" class="admin-btn admin-btn--ghost admin-btn--small" id="clearFiltersBtn">Réinitialiser</button>
+    </div>
+
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th>Produit</th><th>Collection</th><th>Stock</th><th>Seuil d'alerte</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th>Produit</th><th>Collection</th><th>Prix</th><th>Stock</th><th>Seuil d'alerte</th><th>Statut</th><th></th></tr></thead>
         <tbody id="inventoryBody"></tbody>
       </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucun produit ne correspond aux filtres.</div>
     </div>
   </main>
 </div>
@@ -30,6 +58,7 @@
 <script src="js/admin-shared.js"></script>
 <script>
 let inventory = [];
+let collections = [];
 
 function statusBadge(item) {
   if (item.isOutOfStock) return '<span class="badge badge--red">Rupture</span>';
@@ -40,30 +69,115 @@ function statusBadge(item) {
 function rowHTML(item) {
   return `
     <tr data-id="${item.id}">
-      <td><strong>${item.name}</strong></td>
+      <td><strong>${item.name}</strong>${item.isActive ? '' : ' <span class="badge badge--gray">Inactif</span>'}</td>
       <td>${item.collection ? item.collection.name : '—'}</td>
-      <td>${item.stock}</td>
+      <td>${item.price} MAD</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" class="quick-stock-input" value="${item.stock}" min="0" style="width:64px;padding:6px;border:1px solid var(--border);">
+          <button data-action="quick-save" class="admin-btn admin-btn--small">✓</button>
+        </div>
+      </td>
       <td>${item.lowStockThreshold}</td>
       <td>${statusBadge(item)}</td>
-      <td class="row-actions"><button data-action="adjust">Ajuster</button><button data-action="history">Historique</button></td>
+      <td class="row-actions">
+        <button data-action="adjust">Ajuster</button>
+        <button data-action="history">Historique</button>
+        <button data-action="toggle-active">${item.isActive ? 'Désactiver' : 'Activer'}</button>
+        <button data-action="details">Détails</button>
+      </td>
     </tr>`;
 }
 
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const collectionId = document.getElementById('collectionFilter').value;
+  const stockFilter = document.getElementById('stockFilter').value;
+  const activeFilter = document.getElementById('activeFilter').value;
+  const sortBy = document.getElementById('sortBy').value;
+
+  let filtered = inventory.filter((p) => {
+    const matchSearch = !search || p.name.toLowerCase().includes(search);
+    const matchCollection = !collectionId || p.collectionId === collectionId;
+    const matchStock = !stockFilter
+      || (stockFilter === 'in' && !p.isLowStock && !p.isOutOfStock)
+      || (stockFilter === 'low' && p.isLowStock)
+      || (stockFilter === 'out' && p.isOutOfStock);
+    const matchActive = !activeFilter || (activeFilter === 'active' ? p.isActive : !p.isActive);
+    return matchSearch && matchCollection && matchStock && matchActive;
+  });
+
+  filtered = filtered.slice().sort((a, b) => {
+    if (sortBy === 'stock-asc') return a.stock - b.stock;
+    if (sortBy === 'stock-desc') return b.stock - a.stock;
+    if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+    if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+    if (sortBy === 'price-asc') return a.price - b.price;
+    if (sortBy === 'price-desc') return b.price - a.price;
+    if (sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
+    if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
+    return 0;
+  });
+
+  document.getElementById('inventoryBody').innerHTML = filtered.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+}
+
 async function load() {
-  inventory = await adminApi('/inventory');
-  document.getElementById('inventoryBody').innerHTML = inventory.map(rowHTML).join('');
+  [inventory, collections] = await Promise.all([adminApi('/inventory'), adminApi('/collections')]);
+  const collectionSelect = document.getElementById('collectionFilter');
+  collectionSelect.innerHTML = '<option value="">Toutes les collections</option>' +
+    collections.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+
   document.getElementById('statTotal').textContent = inventory.length;
   document.getElementById('statLow').textContent = inventory.filter((p) => p.isLowStock).length;
   document.getElementById('statOut').textContent = inventory.filter((p) => p.isOutOfStock).length;
+  applyFilters();
 }
+
+['searchInput', 'collectionFilter', 'stockFilter', 'activeFilter', 'sortBy'].forEach((id) => {
+  const el = document.getElementById(id);
+  el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', applyFilters);
+});
+document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('collectionFilter').value = '';
+  document.getElementById('stockFilter').value = '';
+  document.getElementById('activeFilter').value = '';
+  document.getElementById('sortBy').value = 'stock-asc';
+  applyFilters();
+});
 
 document.getElementById('inventoryBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
-  const id = btn.closest('tr').dataset.id;
+  const row = btn.closest('tr');
+  const id = row.dataset.id;
   const item = inventory.find((i) => i.id === id);
+
   if (btn.dataset.action === 'adjust') openAdjustModal(item);
   if (btn.dataset.action === 'history') openHistoryModal(item);
+  if (btn.dataset.action === 'details') openDetailsModal(item);
+
+  if (btn.dataset.action === 'toggle-active') {
+    try {
+      await adminApi(`/products/${item.id}`, { method: 'PUT', body: JSON.stringify({ isActive: !item.isActive }) });
+      toast(item.isActive ? 'Produit désactivé.' : 'Produit activé.');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  if (btn.dataset.action === 'quick-save') {
+    const input = row.querySelector('.quick-stock-input');
+    const newStock = Math.max(0, Number(input.value) || 0);
+    const delta = newStock - item.stock;
+    if (delta === 0) return;
+    try {
+      await adminApi(`/inventory/${item.id}/adjust`, { method: 'POST', body: JSON.stringify({ amount: delta, reason: 'Correction rapide (dashboard)' }) });
+      toast('Stock mis à jour.');
+      await load();
+    } catch (err) { toast(err.message, 'error'); }
+  }
 });
 
 function openAdjustModal(item) {
@@ -113,6 +227,27 @@ async function openHistoryModal(item) {
           </tbody>
         </table>
       </div>
+      <div class="admin-modal__actions"><button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+function openDetailsModal(item) {
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>${item.name}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <p style="font-size:13px;line-height:1.9;color:#333;">
+        <strong>Collection</strong> : ${item.collection ? item.collection.name : '—'}<br>
+        <strong>Prix</strong> : ${item.price} MAD${item.flashSaleActive ? ` (Flash Sale : ${item.flashSalePrice} MAD)` : ''}<br>
+        <strong>Stock</strong> : ${item.stock} (seuil d'alerte : ${item.lowStockThreshold})<br>
+        <strong>Statut</strong> : ${item.isActive ? 'Actif' : 'Inactif'}<br>
+        <strong>Notes</strong> : ${item.notes || '—'}<br>
+        <strong>Description</strong> : ${item.description || '—'}
+      </p>
       <div class="admin-modal__actions"><button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button></div>
     </div>`;
   document.body.appendChild(overlay);

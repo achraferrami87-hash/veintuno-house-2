@@ -145,21 +145,33 @@ router.get('/free-pack', async (req, res) => {
 
   const collectionIds = config.eligibleCollections.map((r) => r.collectionId);
   const byCollection = collectionIds.length
-    ? await prisma.product.findMany({ where: { collectionId: { in: collectionIds }, isActive: true } })
+    ? await prisma.product.findMany({ where: { collectionId: { in: collectionIds }, isActive: true }, include: { collection: true } })
     : [];
-  const byProduct = config.eligibleProducts.map((r) => r.product).filter((p) => p.isActive);
+  const byProductRaw = config.eligibleProducts.map((r) => r.product).filter((p) => p.isActive);
+  const byProduct = byProductRaw.length
+    ? await prisma.product.findMany({ where: { id: { in: byProductRaw.map((p) => p.id) } }, include: { collection: true } })
+    : [];
 
   const merged = new Map();
   [...byCollection, ...byProduct].forEach((p) => merged.set(p.id, p));
+
+  // Per-item Free Pack price, so the storefront can show each product's real
+  // Free Pack price (perfume vs gel douche) instead of its normal price.
+  function freePackItemPrice(product) {
+    const slug = product.collection ? product.collection.slug : null;
+    if (slug === 'parfums') return config.perfumePrice;
+    if (slug === 'gels-douche') return config.gelDouchePrice;
+    return product.price;
+  }
 
   res.json({
     id: config.id,
     name: config.name,
     minItems: config.minItems,
     allowMixCategories: config.allowMixCategories,
-    priceThreshold: config.priceThreshold,
-    flatPrice: config.flatPrice,
-    eligibleProducts: Array.from(merged.values()).map(parseImages),
+    perfumePrice: config.perfumePrice,
+    gelDouchePrice: config.gelDouchePrice,
+    eligibleProducts: Array.from(merged.values()).map((p) => ({ ...parseImages(p), freePackPrice: freePackItemPrice(p) })),
   });
 });
 
@@ -752,7 +764,10 @@ async function resolveItemsPricing(items) {
       }
 
       const uniqueSlugs = [...new Set(slugs)];
-      const uniqueProducts = await prisma.product.findMany({ where: { slug: { in: uniqueSlugs } } });
+      const uniqueProducts = await prisma.product.findMany({
+        where: { slug: { in: uniqueSlugs } },
+        include: { collection: true },
+      });
       if (uniqueProducts.length !== uniqueSlugs.length) return { error: 'Un des produits sélectionnés est introuvable.' };
       const bySlug = new Map(uniqueProducts.map((p) => [p.slug, p]));
       const components = slugs.map((s) => bySlug.get(s));
@@ -772,11 +787,19 @@ async function resolveItemsPricing(items) {
         }
       }
 
-      // Threshold-based flat pricing: below the threshold, the customer pays
-      // the normal sum of individual prices — the flat price only kicks in
-      // once the selected perfumes' combined value reaches priceThreshold.
-      const componentsTotal = components.reduce((s, c) => s + c.price, 0);
-      const unitPrice = componentsTotal >= config.priceThreshold ? config.flatPrice : componentsTotal;
+      // Per-item Free Pack pricing: every perfume is priced individually at
+      // config.perfumePrice and every gel douche at config.gelDouchePrice —
+      // these are NOT summed into one flat total for the whole pack. Any
+      // other category (supplements, cosmetics) keeps its normal price.
+      // This pricing rule applies ONLY inside the Free Pack — normal product
+      // prices, regular Packs, and the rest of the cart are untouched.
+      function freePackItemPrice(product) {
+        const slug = product.collection ? product.collection.slug : null;
+        if (slug === 'parfums') return config.perfumePrice;
+        if (slug === 'gels-douche') return config.gelDouchePrice;
+        return product.price;
+      }
+      const unitPrice = components.reduce((s, c) => s + freePackItemPrice(c), 0);
       resolved.push({
         kind: 'FREE_PACK', collectionId: null,
         name: config.name, unitPrice, quantity,
