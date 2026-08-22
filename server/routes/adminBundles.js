@@ -15,7 +15,12 @@ function slugify(str) {
 }
 
 router.get('/', async (req, res) => {
+  const where = {};
+  if (req.query.isActive === 'true') where.isActive = true;
+  if (req.query.isActive === 'false') where.isActive = false;
+  if (req.query.search) where.name = { contains: req.query.search.toString() };
   const bundles = await prisma.bundle.findMany({
+    where,
     orderBy: { position: 'asc' },
     include: { items: { include: { product: true } } },
   });

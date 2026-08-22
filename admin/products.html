@@ -23,6 +23,15 @@
     <div class="admin-toolbar">
       <input type="search" id="searchInput" placeholder="Rechercher un produit...">
       <select id="collectionFilter"><option value="">Toutes les collections</option></select>
+      <select id="statusFilter">
+        <option value="">Tous les statuts</option>
+        <option value="active">Actif</option>
+        <option value="inactive">Inactif</option>
+      </select>
+      <select id="flashSaleFilter">
+        <option value="">Flash Sale : tous</option>
+        <option value="on">Flash Sale actif</option>
+      </select>
     </div>
 
     <div class="admin-table-wrap">
@@ -50,6 +59,7 @@ function productRowHTML(p) {
   if (p.isBestSeller) tags.push('<span class="badge badge--gold">Best Seller</span>');
   if (p.isNew) tags.push('<span class="badge badge--gray">New</span>');
   if (p.isLimitedEdition) tags.push('<span class="badge badge--black">Édition limitée</span>');
+  if (p.flashSaleActive) tags.push('<span class="badge badge--red">Flash Sale</span>');
   let images = [];
   try { images = JSON.parse(p.images || '[]'); } catch (e) {}
 
@@ -58,7 +68,7 @@ function productRowHTML(p) {
       <td><div class="thumb-preview">${images[0] ? `<img src="${images[0]}" style="width:100%;height:100%;object-fit:cover;">` : svgFor(p.shape, p.color)}</div></td>
       <td><strong>${p.name}</strong><div style="color:var(--gray);font-size:12px;">${p.notes || ''}</div></td>
       <td>${col ? col.name : '—'}</td>
-      <td>${p.price} MAD</td>
+      <td>${p.flashSaleActive && p.flashSalePrice != null ? `<span style="text-decoration:line-through;color:var(--gray);font-size:12px;">${p.price} MAD</span> <strong style="color:#a13333;">${p.flashSalePrice} MAD</strong>` : `${p.price} MAD`}</td>
       <td>${p.stock}</td>
       <td>${p.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}</td>
       <td>${tags.join(' ')}</td>
@@ -70,6 +80,12 @@ function productRowHTML(p) {
     </tr>`;
 }
 
+function toLocalDateTimeInput(iso) {
+  const d = new Date(iso);
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function svgFor(shape, color) {
   if (shape === 'jar') return `<svg viewBox="0 0 120 220"><rect x="26" y="60" width="68" height="100" fill="${color}"/></svg>`;
   if (shape === 'tube') return `<svg viewBox="0 0 120 220"><path d="M40 60 l12 128 h16 L80 60Z" fill="${color}"/></svg>`;
@@ -79,10 +95,14 @@ function svgFor(shape, color) {
 function renderTable() {
   const search = document.getElementById('searchInput').value.toLowerCase();
   const colFilter = document.getElementById('collectionFilter').value;
+  const statusFilter = document.getElementById('statusFilter').value;
+  const flashFilter = document.getElementById('flashSaleFilter').value;
   const filtered = allProducts.filter((p) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search);
     const matchCol = !colFilter || p.collectionId === colFilter;
-    return matchSearch && matchCol;
+    const matchStatus = !statusFilter || (statusFilter === 'active' ? p.isActive : !p.isActive);
+    const matchFlash = !flashFilter || p.flashSaleActive;
+    return matchSearch && matchCol && matchStatus && matchFlash;
   });
   document.getElementById('productsBody').innerHTML = filtered.map(productRowHTML).join('');
   document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
@@ -98,6 +118,8 @@ async function loadAll() {
 
 document.getElementById('searchInput').addEventListener('input', renderTable);
 document.getElementById('collectionFilter').addEventListener('change', renderTable);
+document.getElementById('statusFilter').addEventListener('change', renderTable);
+document.getElementById('flashSaleFilter').addEventListener('change', renderTable);
 
 document.getElementById('productsBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
@@ -186,6 +208,22 @@ function openProductModal(product) {
           <p class="admin-field-help">La première image est utilisée comme visuel principal.</p>
         </div>
         <div class="admin-field"><label>Vidéo (URL, optionnel)</label><input name="videoUrl" value="${isEdit ? (product.videoUrl || '') : ''}"></div>
+
+        <div class="admin-field" style="background:#fdf3f3;border:1px solid #f0d5d5;border-radius:8px;padding:16px;">
+          <label class="admin-checkbox" style="margin-bottom:10px;"><input type="checkbox" name="flashSaleActive" id="flashSaleActiveCheck" ${isEdit && product.flashSaleActive ? 'checked' : ''}> <strong>Flash Sale actif</strong></label>
+          <div id="flashSaleFields" style="display:${isEdit && product.flashSaleActive ? 'block' : 'none'};">
+            <div class="admin-form__row">
+              <div class="admin-field"><label>Prix Flash Sale (MAD)</label><input type="number" step="0.01" name="flashSalePrice" value="${isEdit && product.flashSalePrice != null ? product.flashSalePrice : ''}"></div>
+              <div class="admin-field"><label>Étiquette (optionnel)</label><input name="flashSaleLabel" value="${isEdit && product.flashSaleLabel ? product.flashSaleLabel : ''}" placeholder="ex. OFFRE LIMITÉE"></div>
+            </div>
+            <div class="admin-form__row">
+              <div class="admin-field"><label>Début (optionnel)</label><input type="datetime-local" name="flashSaleStart" value="${isEdit && product.flashSaleStart ? toLocalDateTimeInput(product.flashSaleStart) : ''}"></div>
+              <div class="admin-field"><label>Fin (optionnel — active un compte à rebours)</label><input type="datetime-local" name="flashSaleEnd" value="${isEdit && product.flashSaleEnd ? toLocalDateTimeInput(product.flashSaleEnd) : ''}"></div>
+            </div>
+            <p class="admin-field-help">Le prix normal n'est jamais modifié — la promotion s'applique automatiquement pendant la période définie (ou en permanence si aucune date n'est fixée).</p>
+          </div>
+        </div>
+
         <div class="admin-field">
           <label>Statuts</label>
           <div class="admin-checkbox-grid">
@@ -233,6 +271,10 @@ function openProductModal(product) {
   overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+  document.getElementById('flashSaleActiveCheck').addEventListener('change', (e) => {
+    document.getElementById('flashSaleFields').style.display = e.target.checked ? 'block' : 'none';
+  });
+
   document.getElementById('productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -246,6 +288,11 @@ function openProductModal(product) {
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',
       isBestSeller: fd.get('isBestSeller') === 'on', isLimitedEdition: fd.get('isLimitedEdition') === 'on',
       packEligible: fd.get('packEligible') === 'on', freePackEligible: fd.get('freePackEligible') === 'on',
+      flashSaleActive: fd.get('flashSaleActive') === 'on',
+      flashSalePrice: fd.get('flashSalePrice') || null,
+      flashSaleLabel: fd.get('flashSaleLabel') || null,
+      flashSaleStart: fd.get('flashSaleStart') || null,
+      flashSaleEnd: fd.get('flashSaleEnd') || null,
     };
     try {
       if (isEdit) await adminApi(`/products/${product.id}`, { method: 'PUT', body: JSON.stringify(payload) });

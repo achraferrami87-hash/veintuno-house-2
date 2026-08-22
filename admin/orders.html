@@ -22,6 +22,12 @@
       <div class="admin-tab" data-status="CANCELLED">Cancelled</div>
     </div>
 
+    <div class="admin-toolbar">
+      <input type="search" id="searchInput" placeholder="N° commande, nom, téléphone...">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);">Du <input type="date" id="dateFrom"></label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);">Au <input type="date" id="dateTo"></label>
+    </div>
+
     <div class="admin-table-wrap">
       <table class="admin-table">
         <thead><tr><th>N°</th><th>Client</th><th>Ville</th><th>Articles</th><th>Total</th><th>Date</th><th>Statut</th><th></th></tr></thead>
@@ -53,7 +59,16 @@ function rowHTML(o) {
 }
 
 async function loadOrders() {
-  const orders = await adminApi(`/orders${currentStatus ? `?status=${currentStatus}` : ''}`);
+  const params = new URLSearchParams();
+  if (currentStatus) params.set('status', currentStatus);
+  const search = document.getElementById('searchInput').value.trim();
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  if (search) params.set('search', search);
+  if (dateFrom) params.set('dateFrom', dateFrom);
+  if (dateTo) params.set('dateTo', dateTo);
+  const qs = params.toString();
+  const orders = await adminApi(`/orders${qs ? `?${qs}` : ''}`);
   document.getElementById('ordersBody').innerHTML = orders.map(rowHTML).join('');
   document.getElementById('emptyState').style.display = orders.length ? 'none' : 'block';
 }
@@ -66,6 +81,14 @@ document.getElementById('statusTabs').addEventListener('click', (e) => {
   currentStatus = tab.dataset.status;
   loadOrders();
 });
+
+let ordersSearchDebounce;
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(ordersSearchDebounce);
+  ordersSearchDebounce = setTimeout(loadOrders, 250);
+});
+document.getElementById('dateFrom').addEventListener('change', loadOrders);
+document.getElementById('dateTo').addEventListener('change', loadOrders);
 
 document.getElementById('ordersBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');

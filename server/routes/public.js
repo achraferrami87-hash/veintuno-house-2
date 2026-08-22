@@ -5,6 +5,18 @@ const { generateOrderNumber } = require('../utils/orderNumber');
 
 const router = express.Router();
 
+// Flash Sale is never a permanent price change — `product.price` always stays
+// the real normal price; this only resolves what the customer sees/pays *now*.
+function getEffectivePrice(product) {
+  if (!product.flashSaleActive || product.flashSalePrice == null) {
+    return { price: product.price, onSale: false };
+  }
+  const now = new Date();
+  if (product.flashSaleStart && now < new Date(product.flashSaleStart)) return { price: product.price, onSale: false };
+  if (product.flashSaleEnd && now > new Date(product.flashSaleEnd)) return { price: product.price, onSale: false };
+  return { price: product.flashSalePrice, onSale: true };
+}
+
 function parseImages(product) {
   let images = [];
   try { images = JSON.parse(product.images || '[]'); } catch (e) { images = []; }
@@ -13,8 +25,14 @@ function parseImages(product) {
   // Backward compatibility: a product only ever migrated with the old
   // single `gender` value still resolves correctly even if `genders` is empty.
   if (genders.length === 0 && product.gender) genders = [product.gender];
-  return { ...product, images, genders };
+  const { price: displayPrice, onSale } = getEffectivePrice(product);
+  return { ...product, images, genders, displayPrice, onSale, originalPrice: product.price };
 }
+
+function isValidPhone(phone) {
+  return /^\d{10}$/.test((phone || '').toString().trim());
+}
+const PHONE_ERROR = 'Veuillez entrer un numéro de téléphone valide de 10 chiffres.';
 
 // ---------- Site settings (WhatsApp / Instagram / perfume disclaimer) ----------
 router.get('/settings', async (req, res) => {
@@ -260,6 +278,7 @@ router.get('/search', async (req, res) => {
 router.post('/loyalty/lookup', async (req, res) => {
   const { phone, fullName } = req.body;
   if (!phone || !fullName) return res.status(400).json({ error: 'Téléphone et nom complet requis.' });
+  if (!isValidPhone(phone)) return res.status(400).json({ error: PHONE_ERROR });
 
   // Lightweight verification: both phone AND the name on file must match,
   // so a stranger can't probe balances with a phone number alone.
@@ -327,10 +346,39 @@ router.get('/orders/:orderNumber/receipt', async (req, res) => {
   });
 });
 
+// ---------- Order history (phone + fullName verification, like loyalty lookup) ----------
+router.post('/orders/history', async (req, res) => {
+  const { phone, fullName } = req.body;
+  if (!phone || !fullName) return res.status(400).json({ error: 'Téléphone et nom complet requis.' });
+  if (!isValidPhone(phone)) return res.status(400).json({ error: PHONE_ERROR });
+
+  const customer = await prisma.customer.findUnique({ where: { phone: phone.trim() } });
+  if (!customer || customer.fullName.trim().toLowerCase() !== fullName.trim().toLowerCase()) {
+    return res.status(404).json({ error: 'Aucune commande trouvée avec ces informations.' });
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { customerId: customer.id },
+    orderBy: { createdAt: 'desc' },
+    include: { items: true },
+  });
+
+  res.json({
+    orders: orders.map((o) => ({
+      orderNumber: o.orderNumber,
+      createdAt: o.createdAt,
+      status: o.status,
+      total: o.total,
+      items: o.items.map((it) => ({ name: it.name, quantity: it.quantity, unitPrice: it.unitPrice })),
+    })),
+  });
+});
+
 // ---------- Loyalty: "Réclamer vos points" redemption request ----------
 router.post('/loyalty/redeem-request', async (req, res) => {
   const { phone, fullName, rewardId } = req.body;
   if (!phone || !fullName) return res.status(400).json({ error: 'Téléphone et nom complet requis.' });
+  if (!isValidPhone(phone)) return res.status(400).json({ error: PHONE_ERROR });
 
   const customer = await prisma.customer.findUnique({ where: { phone: phone.trim() } });
   if (!customer || customer.fullName.trim().toLowerCase() !== fullName.trim().toLowerCase()) {
@@ -357,18 +405,45 @@ router.post('/loyalty/redeem-request', async (req, res) => {
 });
 
 // ---------- Reviews (customer-facing) ----------
+router.get('/review-settings', async (req, res) => {
+  let settings = await prisma.reviewSettings.findFirst();
+  if (!settings) settings = await prisma.reviewSettings.create({ data: {} });
+  res.json(settings);
+});
+
 router.get('/products/:slug/reviews', async (req, res) => {
   const product = await prisma.product.findUnique({ where: { slug: req.params.slug } });
   if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
-  const reviews = await prisma.review.findMany({
+
+  const settings = await prisma.reviewSettings.findFirst();
+  if (settings && !settings.isEnabled) return res.json({ reviews: [], avgRating: 0, count: 0, enabled: false });
+
+  const minRating = settings ? settings.minRating : 1;
+  const allApproved = await prisma.review.findMany({
     where: { productId: product.id, status: 'APPROVED' },
     orderBy: { createdAt: 'desc' },
   });
-  const avgRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+  const avgRating = allApproved.length ? allApproved.reduce((s, r) => s + r.rating, 0) / allApproved.length : 0;
+  const count = allApproved.length;
+
+  let visible = allApproved.filter((r) => r.rating >= minRating);
+  const sortOrder = settings ? settings.sortOrder : 'recent';
+  if (sortOrder === 'rating_high') visible = visible.sort((a, b) => b.rating - a.rating);
+  else if (sortOrder === 'rating_low') visible = visible.sort((a, b) => a.rating - b.rating);
+  else if (sortOrder === 'featured') visible = visible.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+  const displayCount = settings ? settings.displayCount : 10;
+  visible = visible.slice(0, displayCount);
+
+  const showCustomerName = !settings || settings.showCustomerName;
   res.json({
-    reviews: reviews.map((r) => ({ rating: r.rating, text: r.text, customerName: r.customerName, date: r.createdAt })),
+    reviews: visible.map((r) => ({
+      rating: r.rating, text: r.text,
+      customerName: showCustomerName ? r.customerName : null,
+      featured: r.featured, date: r.createdAt,
+    })),
     avgRating,
-    count: reviews.length,
+    count,
+    enabled: true,
   });
 });
 
@@ -377,6 +452,12 @@ router.post('/reviews', async (req, res) => {
   const ratingNum = parseInt(rating, 10);
   if (!productSlug || !orderNumber || !phone || !ratingNum || ratingNum < 1 || ratingNum > 5) {
     return res.status(400).json({ error: 'Informations manquantes ou note invalide (1 à 5).' });
+  }
+  if (!isValidPhone(phone)) return res.status(400).json({ error: PHONE_ERROR });
+
+  const reviewSettings = await prisma.reviewSettings.findFirst();
+  if (reviewSettings && !reviewSettings.isEnabled) {
+    return res.status(403).json({ error: 'Les avis clients sont temporairement désactivés.' });
   }
 
   const product = await prisma.product.findUnique({ where: { slug: productSlug } });
@@ -399,6 +480,7 @@ router.post('/reviews', async (req, res) => {
   const existing = await prisma.review.findFirst({ where: { orderId: order.id, productId: product.id } });
   if (existing) return res.status(400).json({ error: 'Vous avez déjà noté ce produit pour cette commande.' });
 
+  const autoApprove = reviewSettings && !reviewSettings.requireApproval || (reviewSettings && reviewSettings.autoApprove);
   await prisma.review.create({
     data: {
       productId: product.id,
@@ -406,11 +488,15 @@ router.post('/reviews', async (req, res) => {
       rating: ratingNum,
       text: text || null,
       customerName: customerName || order.fullName,
-      status: 'PENDING',
+      status: autoApprove ? 'APPROVED' : 'PENDING',
     },
   });
 
-  res.json({ message: 'Merci pour votre avis ! Il sera visible après validation par notre équipe.' });
+  res.json({
+    message: autoApprove
+      ? 'Merci pour votre avis ! Il est déjà visible sur la fiche produit.'
+      : 'Merci pour votre avis ! Il sera visible après validation par notre équipe.',
+  });
 });
 
 // ---------- Promo validation ----------
@@ -437,6 +523,9 @@ router.post('/orders', async (req, res) => {
 
   if (!customer || !customer.fullName || !customer.address || !customer.city || !customer.phone) {
     return res.status(400).json({ error: 'Informations client incomplètes.' });
+  }
+  if (!isValidPhone(customer.phone)) {
+    return res.status(400).json({ error: PHONE_ERROR });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Le panier est vide.' });
@@ -599,9 +688,12 @@ async function resolveItemsPricing(items) {
     if (raw.kind === 'PRODUCT') {
       const product = await prisma.product.findUnique({ where: { slug: raw.productSlug } });
       if (!product || !product.isActive) return { error: `Produit introuvable : ${raw.productSlug}` };
+      // Always re-derive the price server-side — a live Flash Sale is honored
+      // automatically, but the client can never dictate the price it pays.
+      const { price: unitPrice } = getEffectivePrice(product);
       resolved.push({
         kind: 'PRODUCT', productId: product.id, collectionId: product.collectionId,
-        name: product.name, unitPrice: product.price, quantity, detail: null,
+        name: product.name, unitPrice, quantity, detail: null,
       });
       continue;
     }

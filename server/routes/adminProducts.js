@@ -33,7 +33,17 @@ function withGendersArray(product) {
 }
 
 router.get('/', async (req, res) => {
+  const where = {};
+  if (req.query.collectionId) where.collectionId = req.query.collectionId;
+  if (req.query.isActive === 'true') where.isActive = true;
+  if (req.query.isActive === 'false') where.isActive = false;
+  if (req.query.flashSaleActive === 'true') where.flashSaleActive = true;
+  if (req.query.search) {
+    const q = req.query.search.toString();
+    where.OR = [{ name: { contains: q } }, { slug: { contains: q } }, { notes: { contains: q } }];
+  }
   const products = await prisma.product.findMany({
+    where,
     include: { collection: true },
     orderBy: [{ collectionId: 'asc' }, { position: 'asc' }],
   });
@@ -82,6 +92,11 @@ router.post('/', async (req, res) => {
       freePackEligible: !!body.freePackEligible,
       position: Number(body.position) || 0,
       collectionId: body.collectionId,
+      flashSaleActive: !!body.flashSaleActive,
+      flashSalePrice: body.flashSalePrice != null && body.flashSalePrice !== '' ? Number(body.flashSalePrice) : null,
+      flashSaleStart: body.flashSaleStart ? new Date(body.flashSaleStart) : null,
+      flashSaleEnd: body.flashSaleEnd ? new Date(body.flashSaleEnd) : null,
+      flashSaleLabel: body.flashSaleLabel || null,
     },
   });
   res.status(201).json(product);
@@ -102,8 +117,12 @@ router.put('/:id', async (req, res) => {
   if (body.volume !== undefined) data.volume = body.volume || null;
   const numFields = ['price', 'stock', 'lowStockThreshold', 'position'];
   numFields.forEach((f) => { if (body[f] !== undefined) data[f] = Number(body[f]); });
-  const boolFields = ['isActive', 'isNew', 'isBestSeller', 'isLimitedEdition', 'packEligible', 'freePackEligible'];
+  const boolFields = ['isActive', 'isNew', 'isBestSeller', 'isLimitedEdition', 'packEligible', 'freePackEligible', 'flashSaleActive'];
   boolFields.forEach((f) => { if (body[f] !== undefined) data[f] = !!body[f]; });
+  if (body.flashSalePrice !== undefined) data.flashSalePrice = body.flashSalePrice != null && body.flashSalePrice !== '' ? Number(body.flashSalePrice) : null;
+  if (body.flashSaleStart !== undefined) data.flashSaleStart = body.flashSaleStart ? new Date(body.flashSaleStart) : null;
+  if (body.flashSaleEnd !== undefined) data.flashSaleEnd = body.flashSaleEnd ? new Date(body.flashSaleEnd) : null;
+  if (body.flashSaleLabel !== undefined) data.flashSaleLabel = body.flashSaleLabel || null;
   if (body.images !== undefined) data.images = JSON.stringify(body.images);
   if (body.name && body.regenerateSlug) data.slug = await uniqueSlug(body.name, req.params.id);
 

@@ -8,6 +8,23 @@ const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVER
 router.get('/', async (req, res) => {
   const where = {};
   if (req.query.status) where.status = req.query.status;
+  if (req.query.dateFrom || req.query.dateTo) {
+    where.createdAt = {};
+    if (req.query.dateFrom) where.createdAt.gte = new Date(req.query.dateFrom);
+    if (req.query.dateTo) {
+      const to = new Date(req.query.dateTo);
+      to.setHours(23, 59, 59, 999);
+      where.createdAt.lte = to;
+    }
+  }
+  if (req.query.search) {
+    const q = req.query.search.toString();
+    where.OR = [
+      { orderNumber: { contains: q } },
+      { fullName: { contains: q } },
+      { phone: { contains: q } },
+    ];
+  }
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: 'desc' },

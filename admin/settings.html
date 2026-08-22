@@ -39,6 +39,14 @@
           <label>Mention affichée sur les fiches parfums</label>
           <textarea name="perfumeDisclaimer" placeholder="Inspiré des plus grands parfums — non affilié aux marques citées."></textarea>
         </div>
+        <div class="admin-field">
+          <label>Thème par défaut du site</label>
+          <select name="defaultTheme">
+            <option value="clair">Clair (blanc + or)</option>
+            <option value="sombre">Sombre (noir + or)</option>
+          </select>
+          <p class="admin-field-help">Le visiteur peut toujours basculer via le sélecteur du site ; son choix est alors mémorisé sur son navigateur.</p>
+        </div>
         <div class="admin-modal__actions" style="justify-content:flex-start;">
           <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
         </div>
@@ -56,6 +64,7 @@ async function load() {
   form.instagramLink.value = settings.instagramLink || '';
   form.perfumeDisclaimer.value = settings.perfumeDisclaimer || '';
   form.instagramQrImage.value = settings.instagramQrImage || '';
+  form.defaultTheme.value = settings.defaultTheme || 'clair';
   if (settings.instagramQrImage) {
     document.getElementById('qrPreview').innerHTML = `<img src="${settings.instagramQrImage}" style="width:120px;height:120px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
   }
@@ -81,6 +90,7 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
     instagramLink: fd.get('instagramLink'),
     instagramQrImage: fd.get('instagramQrImage'),
     perfumeDisclaimer: fd.get('perfumeDisclaimer'),
+    defaultTheme: fd.get('defaultTheme'),
   };
   try {
     await adminApi('/settings', { method: 'PUT', body: JSON.stringify(payload) });

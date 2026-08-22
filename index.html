@@ -8,6 +8,17 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<script>
+// Applied synchronously, before first paint, so a returning visitor who
+// chose "Sombre" never sees a flash of the light theme on load.
+try {
+  var urlTheme = new URLSearchParams(location.search).get('theme');
+  var savedTheme = (urlTheme === 'clair' || urlTheme === 'sombre') ? urlTheme : localStorage.getItem('veintuno_theme');
+  if (savedTheme === 'clair' || savedTheme === 'sombre') {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }
+} catch (e) { /* storage unavailable — default theme applies */ }
+</script>
 </head>
 <body>
 
@@ -23,6 +34,10 @@
     </div>
     <a href="#accueil" class="logo-word">VEINTUNO HOUSE</a>
     <div class="header__zone header__zone--right">
+      <div class="theme-switch" id="themeSwitch" role="group" aria-label="Thème du site">
+        <button type="button" class="theme-switch__option" data-theme="clair" aria-label="Thème clair">Clair</button>
+        <button type="button" class="theme-switch__option" data-theme="sombre" aria-label="Thème sombre">Sombre</button>
+      </div>
       <button type="button" class="icon-btn" id="searchToggle" aria-label="Rechercher">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M21 21 L16.6 16.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
       </button>
@@ -132,7 +147,7 @@
         </label>
         <label>
           <span>Téléphone</span>
-          <input type="tel" name="phone" required placeholder="06 00 00 00 00">
+          <input type="tel" name="phone" required placeholder="06 00 00 00 00" maxlength="10" inputmode="numeric" pattern="[0-9]{10}">
         </label>
         <div id="loyaltyError" class="checkout-form__error" hidden></div>
         <button type="submit" class="btn btn--gold btn--full" id="loyaltySubmitBtn">Consulter mes points</button>
@@ -257,7 +272,7 @@
         </label>
         <label>
           <span>Téléphone</span>
-          <input type="tel" name="phone" required autocomplete="tel" placeholder="06 00 00 00 00">
+          <input type="tel" name="phone" required autocomplete="tel" placeholder="06 00 00 00 00" maxlength="10" inputmode="numeric" pattern="[0-9]{10}">
         </label>
         <div id="checkoutError" class="checkout-form__error" hidden></div>
         <div class="checkout-form__summary">
@@ -266,6 +281,14 @@
         </div>
         <button type="submit" class="btn btn--gold btn--full" id="checkoutReviewBtn">Vérifier ma commande</button>
       </form>
+      <details class="order-history-toggle">
+        <summary>Historique de vos commandes</summary>
+        <div class="order-history" id="orderHistoryPanel">
+          <p class="admin-field-help">Renseignez votre nom et téléphone ci-dessus, puis cliquez ci-dessous.</p>
+          <button type="button" class="btn btn--outline btn--full" id="orderHistoryBtn">Voir mes commandes précédentes</button>
+          <div id="orderHistoryResult"></div>
+        </div>
+      </details>
     </div>
 
     <!-- Step: Review (final explicit confirmation, prevents accidental double-order) -->
@@ -311,6 +334,21 @@
     </div>
 
   </aside>
+</div>
+
+<!-- ADD TO CART — confirmation -->
+<div class="atc-toast" id="atcToast" hidden>
+  <div class="atc-toast__backdrop" id="atcToastBackdrop"></div>
+  <div class="atc-toast__card">
+    <div class="atc-toast__icon">
+      <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <p class="atc-toast__msg">Produit ajouté au panier</p>
+    <div class="atc-toast__actions">
+      <button type="button" class="btn btn--outline" id="atcContinueShopping">Continuer mes achats</button>
+      <button type="button" class="btn btn--gold" id="atcContinue">Continuer</button>
+    </div>
+  </div>
 </div>
 
 <script src="js/script.js"></script>

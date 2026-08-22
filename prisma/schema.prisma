@@ -69,6 +69,15 @@ model Product {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Flash Sale — a temporary promotional price. `price` above is never
+  // overwritten; the effective price is resolved at read/checkout time from
+  // these fields so the "normal price" is always safely recoverable.
+  flashSaleActive Boolean   @default(false)
+  flashSalePrice  Float?
+  flashSaleStart  DateTime?
+  flashSaleEnd    DateTime?
+  flashSaleLabel  String?
+
   collectionId String
   collection   Collection @relation(fields: [collectionId], references: [id])
 
@@ -432,6 +441,7 @@ model Review {
   text         String?
   customerName String?
   status       String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  featured     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -440,6 +450,19 @@ model Review {
 
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id])
+}
+
+// Site-wide Review behavior, admin-configurable (singleton row).
+model ReviewSettings {
+  id               String   @id @default(cuid())
+  isEnabled        Boolean  @default(true)
+  minRating        Int      @default(1)
+  requireApproval  Boolean  @default(true)
+  autoApprove      Boolean  @default(false)
+  showCustomerName Boolean  @default(true)
+  sortOrder        String   @default("recent") // recent | rating_high | rating_low | featured
+  displayCount     Int      @default(10)
+  updatedAt        DateTime @updatedAt
 }
 
 // ===========================
@@ -451,5 +474,6 @@ model SiteSettings {
   instagramLink     String?
   instagramQrImage  String?
   perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
+  defaultTheme      String   @default("clair") // clair | sombre — the visitor's own choice (localStorage) still overrides this
   updatedAt         DateTime @updatedAt
 }

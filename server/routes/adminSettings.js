@@ -21,6 +21,9 @@ router.put('/', async (req, res) => {
   if (body.perfumeDisclaimer !== undefined && body.perfumeDisclaimer !== '') {
     data.perfumeDisclaimer = body.perfumeDisclaimer;
   }
+  if (body.defaultTheme === 'clair' || body.defaultTheme === 'sombre') {
+    data.defaultTheme = body.defaultTheme;
+  }
 
   const updated = await prisma.siteSettings.update({ where: { id: settings.id }, data });
   res.json(updated);

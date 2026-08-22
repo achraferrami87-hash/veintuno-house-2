@@ -15,19 +15,57 @@
         <h1>Avis clients</h1>
         <p>Validez les avis avant qu'ils n'apparaissent publiquement sur les fiches produit.</p>
       </div>
-      <div class="admin-header__actions">
-        <select id="statusFilter">
-          <option value="">Tous les statuts</option>
-          <option value="PENDING">En attente</option>
-          <option value="APPROVED">Approuvés</option>
-          <option value="REJECTED">Rejetés</option>
-        </select>
-      </div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:14px;">Réglages des avis</h2>
+      <form class="admin-form" id="settingsForm">
+        <div class="admin-checkbox-grid" style="margin-bottom:14px;">
+          <label class="admin-checkbox"><input type="checkbox" name="isEnabled"> Avis activés sur le site</label>
+          <label class="admin-checkbox"><input type="checkbox" name="requireApproval"> Validation admin requise</label>
+          <label class="admin-checkbox"><input type="checkbox" name="autoApprove"> Auto-approbation (ignore la validation)</label>
+          <label class="admin-checkbox"><input type="checkbox" name="showCustomerName"> Afficher le nom du client</label>
+        </div>
+        <div class="admin-form__row">
+          <div class="admin-field"><label>Note minimum affichée</label>
+            <select name="minRating"><option value="1">1 étoile et +</option><option value="2">2 étoiles et +</option><option value="3">3 étoiles et +</option><option value="4">4 étoiles et +</option><option value="5">5 étoiles uniquement</option></select>
+          </div>
+          <div class="admin-field"><label>Tri d'affichage</label>
+            <select name="sortOrder">
+              <option value="recent">Plus récents d'abord</option>
+              <option value="rating_high">Meilleures notes d'abord</option>
+              <option value="rating_low">Notes les plus basses d'abord</option>
+              <option value="featured">Avis mis en avant d'abord</option>
+            </select>
+          </div>
+          <div class="admin-field"><label>Nombre d'avis affichés par produit</label><input type="number" name="displayCount" min="1"></div>
+        </div>
+        <div class="admin-modal__actions" style="justify-content:flex-start;"><button type="submit" class="admin-btn admin-btn--gold">Enregistrer les réglages</button></div>
+      </form>
+    </div>
+
+    <div class="admin-toolbar">
+      <input type="search" id="searchInput" placeholder="Rechercher dans les avis...">
+      <select id="productFilter"><option value="">Tous les produits</option></select>
+      <select id="ratingFilter">
+        <option value="">Toutes les notes</option>
+        <option value="5">★★★★★</option>
+        <option value="4">★★★★☆</option>
+        <option value="3">★★★☆☆</option>
+        <option value="2">★★☆☆☆</option>
+        <option value="1">★☆☆☆☆</option>
+      </select>
+      <select id="statusFilter">
+        <option value="">Tous les statuts</option>
+        <option value="PENDING">En attente</option>
+        <option value="APPROVED">Approuvés</option>
+        <option value="REJECTED">Rejetés</option>
+      </select>
     </div>
 
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th>Produit</th><th>Note</th><th>Avis</th><th>Client</th><th>Commande</th><th>Date</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th>Produit</th><th>Note</th><th>Avis</th><th>Client</th><th>Commande</th><th>Date</th><th>Mis en avant</th><th>Statut</th><th></th></tr></thead>
         <tbody id="reviewsBody"></tbody>
       </table>
     </div>
@@ -37,6 +75,7 @@
 <script src="js/admin-shared.js"></script>
 <script>
 let reviews = [];
+let products = [];
 
 function stars(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
 
@@ -51,44 +90,134 @@ function reviewRowHTML(r) {
     <tr data-id="${r.id}">
       <td>${r.product ? r.product.name : '—'}</td>
       <td style="color:#C9A227;">${stars(r.rating)}</td>
-      <td style="max-width:280px;">${r.text || '<em style="color:var(--gray);">—</em>'}</td>
+      <td style="max-width:260px;">${r.text || '<em style="color:var(--gray);">—</em>'}</td>
       <td>${r.customerName || '—'}</td>
       <td>${r.order ? r.order.orderNumber : '—'}</td>
       <td>${formatDate(r.createdAt)}</td>
+      <td><button data-action="toggle-featured" class="admin-btn admin-btn--small ${r.featured ? 'admin-btn--gold' : 'admin-btn--ghost'}">${r.featured ? '★ Oui' : '☆ Non'}</button></td>
       <td>${statusBadge(r.status)}</td>
       <td class="row-actions">
         ${r.status !== 'APPROVED' ? '<button data-action="approve">Approuver</button>' : ''}
         ${r.status !== 'REJECTED' ? '<button data-action="reject">Rejeter</button>' : ''}
+        <button data-action="edit">Modifier</button>
         <button data-action="delete" class="is-danger">Supprimer</button>
       </td>
     </tr>`;
 }
 
-async function loadAll() {
+async function loadReviews() {
+  const params = new URLSearchParams();
   const status = document.getElementById('statusFilter').value;
-  reviews = await adminApi(`/reviews${status ? `?status=${status}` : ''}`);
-  document.getElementById('reviewsBody').innerHTML = reviews.map(reviewRowHTML).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray);">Aucun avis.</td></tr>';
+  const productId = document.getElementById('productFilter').value;
+  const rating = document.getElementById('ratingFilter').value;
+  const search = document.getElementById('searchInput').value.trim();
+  if (status) params.set('status', status);
+  if (productId) params.set('productId', productId);
+  if (rating) params.set('rating', rating);
+  if (search) params.set('search', search);
+  const qs = params.toString();
+  reviews = await adminApi(`/reviews${qs ? `?${qs}` : ''}`);
+  document.getElementById('reviewsBody').innerHTML = reviews.map(reviewRowHTML).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--gray);">Aucun avis.</td></tr>';
 }
 
-document.getElementById('statusFilter').addEventListener('change', loadAll);
+async function loadSettings() {
+  const settings = await adminApi('/reviews/settings');
+  const form = document.getElementById('settingsForm');
+  form.isEnabled.checked = settings.isEnabled;
+  form.requireApproval.checked = settings.requireApproval;
+  form.autoApprove.checked = settings.autoApprove;
+  form.showCustomerName.checked = settings.showCustomerName;
+  form.minRating.value = settings.minRating;
+  form.sortOrder.value = settings.sortOrder;
+  form.displayCount.value = settings.displayCount;
+}
+
+document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const payload = {
+    isEnabled: fd.get('isEnabled') === 'on',
+    requireApproval: fd.get('requireApproval') === 'on',
+    autoApprove: fd.get('autoApprove') === 'on',
+    showCustomerName: fd.get('showCustomerName') === 'on',
+    minRating: fd.get('minRating'),
+    sortOrder: fd.get('sortOrder'),
+    displayCount: fd.get('displayCount'),
+  };
+  try {
+    await adminApi('/reviews/settings', { method: 'PUT', body: JSON.stringify(payload) });
+    toast('Réglages des avis enregistrés.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+['statusFilter', 'productFilter', 'ratingFilter'].forEach((id) => {
+  document.getElementById(id).addEventListener('change', loadReviews);
+});
+let debounceTimer;
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(loadReviews, 250);
+});
 
 document.getElementById('reviewsBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
   const id = btn.closest('tr').dataset.id;
-  if (btn.dataset.action === 'approve') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'APPROVED' }) }); toast('Avis approuvé.'); await loadAll(); }
-  if (btn.dataset.action === 'reject') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'REJECTED' }) }); toast('Avis rejeté.'); await loadAll(); }
+  const review = reviews.find((r) => r.id === id);
+  if (btn.dataset.action === 'approve') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'APPROVED' }) }); toast('Avis approuvé.'); await loadReviews(); }
+  if (btn.dataset.action === 'reject') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'REJECTED' }) }); toast('Avis rejeté.'); await loadReviews(); }
+  if (btn.dataset.action === 'toggle-featured') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ featured: !review.featured }) }); await loadReviews(); }
+  if (btn.dataset.action === 'edit') openEditModal(review);
   if (btn.dataset.action === 'delete') {
     const ok = await confirmDialog('Supprimer définitivement cet avis ?');
     if (!ok) return;
-    await adminApi(`/reviews/${id}`, { method: 'DELETE' }); toast('Avis supprimé.'); await loadAll();
+    await adminApi(`/reviews/${id}`, { method: 'DELETE' }); toast('Avis supprimé.'); await loadReviews();
   }
 });
+
+function openEditModal(review) {
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>Modifier l'avis</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="editReviewForm">
+        <div class="admin-field"><label>Nom du client</label><input name="customerName" value="${review.customerName || ''}"></div>
+        <div class="admin-field"><label>Note</label>
+          <select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option value="${n}" ${review.rating === n ? 'selected' : ''}>${n} étoile(s)</option>`).join('')}</select>
+        </div>
+        <div class="admin-field"><label>Texte de l'avis</label><textarea name="text" rows="4">${review.text || ''}</textarea></div>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('editReviewForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await adminApi(`/reviews/${review.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ customerName: fd.get('customerName'), rating: fd.get('rating'), text: fd.get('text') }),
+      });
+      toast('Avis mis à jour.');
+      overlay.remove();
+      await loadReviews();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
 
 (async () => {
   const admin = await initAdminPage('reviews.html');
   if (!admin) return;
-  await loadAll();
+  products = await adminApi('/products');
+  document.getElementById('productFilter').innerHTML = '<option value="">Tous les produits</option>' +
+    products.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+  await Promise.all([loadSettings(), loadReviews()]);
 })();
 </script>
 </body>

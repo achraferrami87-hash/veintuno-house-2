@@ -16,6 +16,42 @@ async function api(path, options = {}) {
 }
 
 // ===========================
+// Phone validation — exactly 10 digits, everywhere a phone is collected
+// ===========================
+const PHONE_ERROR_MSG = 'Veuillez entrer un numéro de téléphone valide de 10 chiffres.';
+function isValidPhone(phone) {
+  return /^\d{10}$/.test((phone || '').toString().trim());
+}
+// Strips non-digits as the customer types, caps at 10, and shows/hides a
+// small inline error once they've typed something but it isn't valid yet.
+function attachPhoneValidation(input) {
+  if (!input || input.dataset.phoneValidationAttached) return;
+  input.dataset.phoneValidationAttached = '1';
+  let errorEl = input.parentElement.querySelector('.phone-error-msg');
+  if (!errorEl) {
+    errorEl = document.createElement('p');
+    errorEl.className = 'phone-error-msg';
+    errorEl.hidden = true;
+    input.insertAdjacentElement('afterend', errorEl);
+  }
+  function refresh(showError) {
+    const isEmpty = input.value.length === 0;
+    const isValid = isValidPhone(input.value);
+    errorEl.hidden = isEmpty || isValid || !showError;
+    errorEl.textContent = PHONE_ERROR_MSG;
+    input.classList.toggle('is-invalid', !isEmpty && !isValid && showError);
+    input.setCustomValidity(!isEmpty && !isValid ? PHONE_ERROR_MSG : '');
+  }
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, 10);
+    refresh(true);
+  });
+  input.addEventListener('blur', () => refresh(true));
+  input.addEventListener('invalid', () => refresh(true));
+  refresh(false);
+}
+
+// ===========================
 // Mobile nav toggle
 // ===========================
 const navToggle = document.getElementById('navToggle');
@@ -77,19 +113,37 @@ function productMediaHTML(p) {
   return productVisual(p.shape, p.color);
 }
 
+function priceHTML(p, variant) {
+  if (!p.onSale) return `<p class="product-detail__price ${variant === 'card' ? 'product-card__price' : ''}">${p.price} MAD</p>`;
+  return `
+    <p class="${variant === 'card' ? 'product-card__price product-card__price--flash' : 'product-detail__price product-detail__price--flash'}">
+      <span class="price-original">${p.originalPrice} MAD</span>
+      <span class="price-sale">${p.displayPrice} MAD</span>
+    </p>`;
+}
+
 function productCardHTML(p) {
   const tag = p.isBestSeller ? 'Best Seller' : p.isLimitedEdition ? 'Édition limitée' : p.isNew ? 'Nouveauté' : null;
   return `
-    <article class="product-card reveal">
-      ${tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
+    <article class="product-card reveal" data-href="#product/${p.slug}">
+      ${p.onSale ? `<span class="flash-badge">${p.flashSaleLabel || 'Flash Sale'}</span>` : tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
       <a href="#product/${p.slug}" class="product-card__bottle">${productMediaHTML(p)}</a>
       <button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>
       <h3><a href="#product/${p.slug}">${p.name}</a></h3>
       <p class="product-card__notes">${p.notes || ''}</p>
-      <p class="product-card__price">${p.price} MAD</p>
+      ${priceHTML(p, 'card')}
       <button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier</button>
     </article>`;
 }
+
+// The whole card navigates to the product page — except the two buttons
+// (quick view / add to cart) and any inner <a>, which handle their own click.
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.product-card[data-href]');
+  if (!card) return;
+  if (e.target.closest('.js-quick-view, .js-add-product, a')) return;
+  window.location.hash = card.dataset.href;
+});
 
 // ===========================
 // PACKS cache (by id) — shared between homepage, collection pages, and the pack modal
@@ -133,6 +187,7 @@ const Cart = (() => {
   const checkoutSubtotalEl = document.getElementById('checkoutSubtotal');
   const checkoutForm = document.getElementById('checkoutForm');
   const checkoutErrorEl = document.getElementById('checkoutError');
+  if (checkoutForm.phone) attachPhoneValidation(checkoutForm.phone);
 
   const reviewItemsEl = document.getElementById('reviewItems');
   const reviewCustomerEl = document.getElementById('reviewCustomer');
@@ -242,7 +297,7 @@ const Cart = (() => {
     } else {
       items.push({
         uid: 'product-' + product.slug, kind: 'PRODUCT', productSlug: product.slug,
-        name: product.name, unitPrice: product.price, quantity: 1,
+        name: product.name, unitPrice: product.onSale ? product.displayPrice : product.price, quantity: 1,
         detail: product.notes || '', shape: product.shape, color: product.color, images: product.images || [],
       });
     }
@@ -379,6 +434,11 @@ const Cart = (() => {
   checkoutForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!checkoutForm.reportValidity()) return;
+    if (!isValidPhone(checkoutForm.phone.value)) {
+      checkoutErrorEl.textContent = PHONE_ERROR_MSG;
+      checkoutErrorEl.hidden = false;
+      return;
+    }
 
     const formData = new FormData(checkoutForm);
     pendingCustomer = {
@@ -405,6 +465,40 @@ const Cart = (() => {
 
     showStep('review');
   });
+
+  const orderHistoryBtn = document.getElementById('orderHistoryBtn');
+  const orderHistoryResult = document.getElementById('orderHistoryResult');
+  if (orderHistoryBtn) {
+    orderHistoryBtn.addEventListener('click', async () => {
+      const fullName = checkoutForm.fullName.value.trim();
+      const phone = checkoutForm.phone.value.trim();
+      if (!fullName || !phone) {
+        orderHistoryResult.innerHTML = '<p class="checkout-form__error">Renseignez votre nom et téléphone ci-dessus d\'abord.</p>';
+        return;
+      }
+      if (!isValidPhone(phone)) {
+        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${PHONE_ERROR_MSG}</p>`;
+        return;
+      }
+      orderHistoryBtn.disabled = true;
+      orderHistoryBtn.textContent = 'Recherche...';
+      try {
+        const data = await api('/orders/history', { method: 'POST', body: JSON.stringify({ fullName, phone }) });
+        orderHistoryResult.innerHTML = data.orders.length
+          ? data.orders.map((o) => `
+            <div class="order-history-item">
+              <div class="order-history-item__head"><span>${o.orderNumber}</span><span>${o.total} MAD</span></div>
+              <div class="order-history-item__meta">${new Date(o.createdAt).toLocaleDateString('fr-FR')} · ${o.status} · ${o.items.length} article(s)</div>
+            </div>`).join('')
+          : '<p class="admin-field-help">Aucune commande trouvée avec ces informations.</p>';
+      } catch (err) {
+        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${err.message}</p>`;
+      } finally {
+        orderHistoryBtn.disabled = false;
+        orderHistoryBtn.textContent = 'Voir mes commandes précédentes';
+      }
+    });
+  }
 
   reviewFinalizeBtn.addEventListener('click', async () => {
     // Belt-and-suspenders against double submission: a synchronous flag
@@ -472,6 +566,33 @@ const Cart = (() => {
   return { addPack, addFreePack, addBundle, addProduct, open, close };
 })();
 
+// ===========================
+// ADD TO CART — confirmation ("Continuer mes achats" / "Continuer")
+// ===========================
+function showAddToCartToast() {
+  const toast = document.getElementById('atcToast');
+  if (!toast) return;
+  toast.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function hideAddToCartToast() {
+  const toast = document.getElementById('atcToast');
+  if (!toast) return;
+  toast.hidden = true;
+  document.body.style.overflow = '';
+}
+(() => {
+  const toast = document.getElementById('atcToast');
+  if (!toast) return;
+  document.getElementById('atcToastBackdrop').addEventListener('click', hideAddToCartToast);
+  document.getElementById('atcContinueShopping').addEventListener('click', hideAddToCartToast);
+  document.getElementById('atcContinue').addEventListener('click', () => {
+    hideAddToCartToast();
+    if (Cart) Cart.open('bag');
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !toast.hidden) hideAddToCartToast(); });
+})();
+
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.js-add-product');
   if (!btn || !Cart) return;
@@ -479,9 +600,7 @@ document.addEventListener('click', async (e) => {
   try {
     const product = await getProductBySlug(slug);
     Cart.addProduct(product);
-    const original = btn.textContent;
-    btn.textContent = 'Ajouté ✓';
-    setTimeout(() => { btn.textContent = original; }, 1400);
+    showAddToCartToast();
   } catch (err) { /* product unavailable */ }
 });
 
@@ -489,9 +608,7 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('.js-add-bundle');
   if (!btn || !Cart) return;
   Cart.addBundle(btn.dataset.id, btn.dataset.name, btn.dataset.price, btn.dataset.detail);
-  const original = btn.textContent;
-  btn.textContent = 'Ajouté ✓';
-  setTimeout(() => { btn.textContent = original; }, 1400);
+  showAddToCartToast();
 });
 
 // ===========================
@@ -1185,6 +1302,7 @@ function initQuickView() {
     body.innerHTML = productDetailBodyHTML(product, true);
     wireProductDetailActions(body, product);
     startVisitorCounter(body.querySelector('.js-visitor-counter'));
+    startFlashCountdown(body.querySelector('.js-flash-countdown'));
 
     modal.classList.add('pack-modal--open');
     modal.setAttribute('aria-hidden', 'false');
@@ -1230,9 +1348,10 @@ function productDetailBodyHTML(p, compact) {
       ${col ? `<p class="section__eyebrow">${col}</p>` : ''}
       <h1 style="${compact ? 'font-size:26px;' : ''}">${p.name}</h1>
       <div class="product-detail__meta-row">
-        <p class="product-detail__price">${p.price} MAD</p>
+        ${priceHTML(p, 'detail')}
         ${p.volume ? `<span class="product-detail__volume">${p.volume}</span>` : ''}
       </div>
+      ${p.onSale && p.flashSaleEnd ? `<div class="flash-countdown js-flash-countdown" data-end="${p.flashSaleEnd}"></div>` : ''}
       <p class="product-detail__availability ${p.stock > 0 ? 'is-available' : 'is-unavailable'}">${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
       <p class="visitor-counter js-visitor-counter" id="${counterId}" data-count="0"></p>
       ${p.description ? `<p class="product-detail__description">${p.description}</p>` : ''}
@@ -1260,7 +1379,9 @@ function starsHTML(rating) {
 async function loadProductReviews(container, slug) {
   if (!container) return;
   let data;
-  try { data = await api(`/products/${slug}/reviews`); } catch (e) { data = { reviews: [], avgRating: 0, count: 0 }; }
+  try { data = await api(`/products/${slug}/reviews`); } catch (e) { data = { reviews: [], avgRating: 0, count: 0, enabled: true }; }
+
+  if (data.enabled === false) { container.innerHTML = ''; return; }
 
   container.innerHTML = `
     <div class="product-reviews__header">
@@ -1269,7 +1390,7 @@ async function loadProductReviews(container, slug) {
     </div>
     <div class="product-reviews__list">
       ${data.reviews.map((r) => `
-        <div class="review-item">
+        <div class="review-item${r.featured ? ' review-item--featured' : ''}">
           ${starsHTML(r.rating)}
           <p class="review-customer">${r.customerName || 'Client VEINTUNO'} — ${new Date(r.date).toLocaleDateString('fr-FR')}</p>
           ${r.text ? `<p>${r.text}</p>` : ''}
@@ -1280,7 +1401,7 @@ async function loadProductReviews(container, slug) {
       <form class="admin-form review-form">
         <div class="admin-form__row">
           <div class="admin-field"><label>Numéro de commande</label><input name="orderNumber" required></div>
-          <div class="admin-field"><label>Téléphone</label><input name="phone" required></div>
+          <div class="admin-field"><label>Téléphone</label><input name="phone" required maxlength="10" inputmode="numeric" pattern="[0-9]{10}"></div>
         </div>
         <div class="admin-field">
           <label>Note</label>
@@ -1300,17 +1421,25 @@ async function loadProductReviews(container, slug) {
 
   const form = container.querySelector('.review-form');
   const msg = container.querySelector('.review-form__msg');
+  attachPhoneValidation(form.phone);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
+    const phone = fd.get('phone').toString().trim();
     msg.hidden = true;
+    if (!isValidPhone(phone)) {
+      msg.textContent = PHONE_ERROR_MSG;
+      msg.hidden = false;
+      msg.className = 'review-form__msg review-form__msg--error';
+      return;
+    }
     try {
       const result = await api('/reviews', {
         method: 'POST',
         body: JSON.stringify({
           productSlug: slug,
           orderNumber: fd.get('orderNumber').toString().trim(),
-          phone: fd.get('phone').toString().trim(),
+          phone,
           rating: fd.get('rating'),
           text: fd.get('text').toString().trim() || undefined,
         }),
@@ -1347,6 +1476,28 @@ function startVisitorCounter(el) {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
+// Renders a live "HH : MM : SS" countdown for a timed Flash Sale, and hides
+// itself once the promotion's end date has passed.
+function startFlashCountdown(el) {
+  if (!el) return;
+  const end = new Date(el.dataset.end).getTime();
+  function tick() {
+    const diff = end - Date.now();
+    if (diff <= 0) { el.remove(); return; }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    const pad = (n) => n.toString().padStart(2, '0');
+    el.innerHTML = `<span>${pad(h)}</span> : <span>${pad(m)}</span> : <span>${pad(s)}</span>`;
+  }
+  tick();
+  const interval = setInterval(tick, 1000);
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(el)) { clearInterval(interval); observer.disconnect(); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
 function wireProductDetailActions(scope, product) {
   const qtyInput = scope.querySelector('.qty-input');
   scope.querySelector('.qty-minus').addEventListener('click', () => {
@@ -1360,9 +1511,7 @@ function wireProductDetailActions(scope, product) {
     addBtn.addEventListener('click', () => {
       const qty = Math.max(1, Number(qtyInput.value) || 1);
       for (let i = 0; i < qty; i += 1) Cart.addProduct(product);
-      const original = addBtn.textContent;
-      addBtn.textContent = 'Ajouté ✓';
-      setTimeout(() => { addBtn.textContent = original; }, 1400);
+      showAddToCartToast();
     });
   }
 }
@@ -1524,6 +1673,8 @@ async function initLoyaltyPage() {
   const resultEl = document.getElementById('loyaltyResult');
   if (!form) return;
 
+  if (form.phone) attachPhoneValidation(form.phone);
+
   // Public, generic "how it works" blurb (the customer's actual balance and
   // available rewards are shown after verification, below).
   if (howEl) {
@@ -1540,50 +1691,83 @@ async function initLoyaltyPage() {
     const fullName = fd.get('fullName').toString().trim();
     const phone = fd.get('phone').toString().trim();
 
+    if (!isValidPhone(phone)) {
+      errorEl.textContent = PHONE_ERROR_MSG;
+      errorEl.hidden = false;
+      return;
+    }
+
     submitBtn.disabled = true;
     submitBtn.textContent = 'Vérification...';
     try {
       const data = await api('/loyalty/lookup', { method: 'POST', body: JSON.stringify({ fullName, phone }) });
       resultEl.hidden = false;
+
+      const hasCelebration = data.availableRewards && data.availableRewards.length > 0;
+      const progressPct = data.nextReward ? Math.min(100, (data.balance / data.nextReward.pointsRequired) * 100) : 100;
+
+      const progressHTML = data.nextReward ? `
+        <div class="loyalty-progress">
+          <div class="loyalty-progress__labels"><span>${data.balance} points</span><span>${data.nextReward.pointsRequired} points</span></div>
+          <div class="loyalty-progress__bar"><div class="loyalty-progress__fill" id="loyaltyProgressFill" data-target="${progressPct}"></div></div>
+          <p class="loyalty-result__next">Encore ${(data.nextReward.pointsRequired - data.balance).toFixed(2)} point(s) pour débloquer : ${data.nextReward.name}</p>
+        </div>` : '';
+
+      const celebrationHTML = hasCelebration ? `
+        <div class="loyalty-celebration">
+          <div class="loyalty-celebration__emoji">🎉</div>
+          <h3>FÉLICITATIONS</h3>
+          <p>Vous avez atteint votre récompense !</p>
+          ${data.availableRewards.length > 1 ? `<div class="admin-field" style="max-width:320px;margin:0 auto 16px;"><select id="claimRewardSelect">${data.availableRewards.map((r) => `<option value="${r.id}">${r.name} (${r.pointsRequired} pts)</option>`).join('')}</select></div>` : `<input type="hidden" id="claimRewardSelect" value="${data.availableRewards[0].id}">`}
+          <button type="button" class="btn btn--gold" id="claimPointsBtn">Réclamer mes points</button>
+          <p id="claimPointsMsg" style="margin-top:12px;color:#e4dfd2;font-size:13px;" hidden></p>
+        </div>` : '';
+
       resultEl.innerHTML = `
         <div class="loyalty-result__balance">
           <p class="section__eyebrow">Bonjour ${data.fullName.split(' ')[0]}</p>
           <p class="loyalty-result__points">${data.balance} <span>points</span></p>
-          ${data.nextReward ? `<p class="loyalty-result__next">Encore ${(data.nextReward.pointsRequired - data.balance).toFixed(2)} point(s) pour : ${data.nextReward.name}</p>` : ''}
         </div>
-        ${data.availableRewards.length ? `
-          <div class="loyalty-result__rewards">
-            <h4>Récompenses accessibles</h4>
-            <ul>${data.availableRewards.map((r) => `<li>${r.name} — ${r.pointsRequired} pts</li>`).join('')}</ul>
-            <div class="admin-field" style="margin-top:14px;">
-              <select id="claimRewardSelect">${data.availableRewards.map((r) => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
-            </div>` : ''}
-        <button type="button" class="btn btn--gold" id="claimPointsBtn" style="margin-top:12px;">Réclamer vos points</button>
-        <p id="claimPointsMsg" class="admin-field-help" style="margin-top:10px;" hidden></p>
+        ${progressHTML}
+        ${celebrationHTML}
+        ${!hasCelebration ? `
+        <div class="loyalty-result__rewards">
+          <h4>Récompenses à venir</h4>
+          <ul>${data.nextReward ? `<li>${data.nextReward.name} — ${data.nextReward.pointsRequired} pts</li>` : '<li>Toutes les récompenses configurées sont déjà débloquées.</li>'}</ul>
+        </div>` : ''}
         <div class="loyalty-result__history">
           <h4>Historique</h4>
           <ul>${data.history.slice(0, 8).map((h) => `<li><span>${new Date(h.date).toLocaleDateString('fr-FR')}</span><span>${h.points > 0 ? '+' : ''}${h.points} pts${h.note ? ` — ${h.note}` : ''}</span></li>`).join('') || '<li>Aucun mouvement pour le moment.</li>'}</ul>
         </div>`;
 
+      // Animate the progress bar fill from 0 on the next frame, not instantly,
+      // so the customer actually sees the "filling up" motion.
+      const fillEl = document.getElementById('loyaltyProgressFill');
+      if (fillEl) {
+        requestAnimationFrame(() => { fillEl.style.width = `${fillEl.dataset.target}%`; });
+      }
+
       const claimBtn = document.getElementById('claimPointsBtn');
-      const claimMsg = document.getElementById('claimPointsMsg');
-      claimBtn.addEventListener('click', async () => {
-        claimBtn.disabled = true;
-        try {
-          const rewardSelect = document.getElementById('claimRewardSelect');
-          const result = await api('/loyalty/redeem-request', {
-            method: 'POST',
-            body: JSON.stringify({ fullName, phone, rewardId: rewardSelect ? rewardSelect.value : undefined }),
-          });
-          claimMsg.textContent = result.message;
-          claimMsg.hidden = false;
-          claimBtn.hidden = true;
-        } catch (err) {
-          claimMsg.textContent = err.message;
-          claimMsg.hidden = false;
-          claimBtn.disabled = false;
-        }
-      });
+      if (claimBtn) {
+        const claimMsg = document.getElementById('claimPointsMsg');
+        claimBtn.addEventListener('click', async () => {
+          claimBtn.disabled = true;
+          try {
+            const rewardSelect = document.getElementById('claimRewardSelect');
+            const result = await api('/loyalty/redeem-request', {
+              method: 'POST',
+              body: JSON.stringify({ fullName, phone, rewardId: rewardSelect ? rewardSelect.value : undefined }),
+            });
+            claimMsg.textContent = result.message;
+            claimMsg.hidden = false;
+            claimBtn.hidden = true;
+          } catch (err) {
+            claimMsg.textContent = err.message;
+            claimMsg.hidden = false;
+            claimBtn.disabled = false;
+          }
+        });
+      }
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -1720,6 +1904,7 @@ function initRevealAnimations() {
     mount.innerHTML = productDetailBodyHTML(product);
     wireProductDetailActions(mount, product);
     startVisitorCounter(mount.querySelector('.js-visitor-counter'));
+    startFlashCountdown(mount.querySelector('.js-flash-countdown'));
     loadProductReviews(mount.querySelector(`#productReviews-${product.slug}`), product.slug);
   }
 
@@ -1797,6 +1982,43 @@ function initRevealAnimations() {
   route();
 })();
 
+// ===========================
+// THEME SWITCH (Clair / Sombre) — persisted per-browser via localStorage
+// ===========================
+async function initThemeSwitch() {
+  const switchEl = document.getElementById('themeSwitch');
+  if (!switchEl) return;
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    switchEl.querySelectorAll('.theme-switch__option').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.theme === theme);
+    });
+  }
+
+  let current;
+  const urlTheme = new URLSearchParams(location.search).get('theme');
+  if (urlTheme === 'clair' || urlTheme === 'sombre') {
+    current = urlTheme;
+  } else {
+    try { current = localStorage.getItem('veintuno_theme'); } catch (e) { current = null; }
+  }
+  if (current !== 'clair' && current !== 'sombre') {
+    // No explicit visitor choice yet — fall back to the admin's configured default.
+    const settings = await getSiteSettings();
+    current = (settings && settings.defaultTheme) || 'clair';
+  }
+  applyTheme(current);
+
+  switchEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.theme-switch__option');
+    if (!btn) return;
+    const theme = btn.dataset.theme;
+    applyTheme(theme);
+    try { localStorage.setItem('veintuno_theme', theme); } catch (e) { /* ignore */ }
+  });
+}
+
 // Boot
 initHomepage();
 initQuickView();
@@ -1804,3 +2026,4 @@ initNavExtras();
 initSearch();
 initLoyaltyPage();
 initContactPage();
+initThemeSwitch();

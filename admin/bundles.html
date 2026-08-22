@@ -20,6 +20,15 @@
       </div>
     </div>
 
+    <div class="admin-toolbar">
+      <input type="search" id="searchInput" placeholder="Rechercher un bundle...">
+      <select id="statusFilter">
+        <option value="">Tous les statuts</option>
+        <option value="true">Actif</option>
+        <option value="false">Inactif</option>
+      </select>
+    </div>
+
     <div class="admin-table-wrap">
       <table class="admin-table">
         <thead><tr><th></th><th>Bundle</th><th>Contenu</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
@@ -52,9 +61,18 @@ function bundleRowHTML(b) {
 }
 
 async function loadAll() {
-  [bundles, products] = await Promise.all([adminApi('/bundles'), adminApi('/products')]);
+  const params = new URLSearchParams();
+  const search = document.getElementById('searchInput').value.trim();
+  const status = document.getElementById('statusFilter').value;
+  if (search) params.set('search', search);
+  if (status) params.set('isActive', status);
+  const qs = params.toString();
+  [bundles, products] = await Promise.all([adminApi(`/bundles${qs ? `?${qs}` : ''}`), products.length ? Promise.resolve(products) : adminApi('/products')]);
   document.getElementById('bundlesBody').innerHTML = bundles.map(bundleRowHTML).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);">Aucun bundle pour le moment.</td></tr>';
 }
+
+document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(window._bundleSearchT); window._bundleSearchT = setTimeout(loadAll, 250); });
+document.getElementById('statusFilter').addEventListener('change', loadAll);
 
 document.getElementById('bundlesBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
