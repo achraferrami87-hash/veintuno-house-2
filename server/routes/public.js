@@ -26,7 +26,12 @@ function parseImages(product) {
   // single `gender` value still resolves correctly even if `genders` is empty.
   if (genders.length === 0 && product.gender) genders = [product.gender];
   const { price: displayPrice, onSale } = getEffectivePrice(product);
-  return { ...product, images, genders, displayPrice, onSale, originalPrice: product.price };
+  const characteristics = Array.isArray(product.characteristics)
+    ? product.characteristics.map((c) => c.characteristic.name)
+    : undefined;
+  const out = { ...product, images, genders, displayPrice, onSale, originalPrice: product.price };
+  if (characteristics) out.characteristics = characteristics;
+  return out;
 }
 
 function isValidPhone(phone) {
@@ -39,6 +44,12 @@ router.get('/settings', async (req, res) => {
   let settings = await prisma.siteSettings.findFirst();
   if (!settings) settings = await prisma.siteSettings.create({ data: {} });
   res.json(settings);
+});
+
+// ---------- Fragrance characteristics (tag vocabulary shared by search + quiz) ----------
+router.get('/characteristics', async (req, res) => {
+  const characteristics = await prisma.characteristic.findMany({ orderBy: { position: 'asc' } });
+  res.json(characteristics);
 });
 
 // ---------- Collections ----------
@@ -81,14 +92,18 @@ router.get('/products', async (req, res) => {
   if (req.query.bestseller === 'true') where.isBestSeller = true;
   if (req.query.new === 'true') where.isNew = true;
 
-  const products = await prisma.product.findMany({ where, orderBy: { position: 'asc' } });
+  const products = await prisma.product.findMany({
+    where,
+    include: { collection: true, characteristics: { include: { characteristic: true } } },
+    orderBy: { position: 'asc' },
+  });
   res.json(products.map(parseImages));
 });
 
 router.get('/products/:slug', async (req, res) => {
   const product = await prisma.product.findUnique({
     where: { slug: req.params.slug },
-    include: { collection: true },
+    include: { collection: true, characteristics: { include: { characteristic: true } } },
   });
   if (!product || !product.isActive) return res.status(404).json({ error: 'Produit introuvable.' });
   res.json(parseImages(product));
@@ -215,16 +230,16 @@ router.get('/homepage', async (req, res) => {
       try { config = JSON.parse(section.config || '{}'); } catch (e) { config = {}; }
 
       if (section.type === 'FEATURED_PRODUCTS' && Array.isArray(config.productSlugs)) {
-        const products = await prisma.product.findMany({ where: { slug: { in: config.productSlugs }, isActive: true } });
+        const products = await prisma.product.findMany({ where: { slug: { in: config.productSlugs }, isActive: true }, include: { collection: true } });
         const ordered = config.productSlugs.map((s) => products.find((p) => p.slug === s)).filter(Boolean);
         config = { ...config, products: ordered.map(parseImages) };
       }
       if (section.type === 'BEST_SELLERS') {
-        const products = await prisma.product.findMany({ where: { isBestSeller: true, isActive: true }, take: 8 });
+        const products = await prisma.product.findMany({ where: { isBestSeller: true, isActive: true }, include: { collection: true }, take: 8 });
         config = { ...config, products: products.map(parseImages) };
       }
       if (section.type === 'NEW_ARRIVALS') {
-        const products = await prisma.product.findMany({ where: { isNew: true, isActive: true }, take: 8 });
+        const products = await prisma.product.findMany({ where: { isNew: true, isActive: true }, include: { collection: true }, take: 8 });
         config = { ...config, products: products.map(parseImages) };
       }
       if (section.type === 'FEATURED_COLLECTIONS' && Array.isArray(config.collectionSlugs)) {

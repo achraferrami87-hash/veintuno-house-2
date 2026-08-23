@@ -124,15 +124,18 @@ function priceHTML(p, variant) {
 
 function productCardHTML(p) {
   const tag = p.isBestSeller ? 'Best Seller' : p.isLimitedEdition ? 'Édition limitée' : p.isNew ? 'Nouveauté' : null;
+  const packOnly = p.collection && p.collection.packOnly;
   return `
     <article class="product-card reveal" data-href="#product/${p.slug}">
       ${p.onSale ? `<span class="flash-badge">${p.flashSaleLabel || 'Flash Sale'}</span>` : tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
       <a href="#product/${p.slug}" class="product-card__bottle">${productMediaHTML(p)}</a>
-      <button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>
+      ${!packOnly ? `<button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>` : ''}
       <h3><a href="#product/${p.slug}">${p.name}</a></h3>
       <p class="product-card__notes">${p.notes || ''}</p>
       ${priceHTML(p, 'card')}
-      <button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier</button>
+      ${packOnly
+        ? `<a href="#collection/${p.collection.slug}" class="btn btn--outline product-card__cta">En pack uniquement</a>`
+        : `<button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier</button>`}
     </article>`;
 }
 
@@ -1486,6 +1489,11 @@ function productDetailBodyHTML(p, compact) {
       ${p.description ? `<p class="product-detail__description">${p.description}</p>` : ''}
       ${notesHTML}
       ${isPerfume ? `<p class="product-detail__disclaimer">${(siteSettingsCache && siteSettingsCache.perfumeDisclaimer) || 'Inspiré des plus grands parfums — non affilié aux marques citées.'}</p>` : ''}
+      ${p.collection && p.collection.packOnly ? `
+      <div class="product-detail__pack-only">
+        <p>Disponible uniquement en pack.</p>
+        <a href="#collection/${p.collection.slug}" class="btn btn--gold btn--full">Choisir mon pack</a>
+      </div>` : `
       <div class="product-detail__actions">
         <div class="qty-selector">
           <button type="button" class="qty-minus" aria-label="Diminuer">−</button>
@@ -1493,7 +1501,7 @@ function productDetailBodyHTML(p, compact) {
           <button type="button" class="qty-plus" aria-label="Augmenter">+</button>
         </div>
         <button type="button" class="btn btn--gold js-detail-add" data-slug="${p.slug}" ${p.stock <= 0 ? 'disabled' : ''}>Ajouter au panier</button>
-      </div>
+      </div>`}
       ${!compact ? `<div class="product-reviews" id="productReviews-${p.slug}"><p class="admin-field-help">Chargement des avis...</p></div>` : ''}
     </div>`;
 }
@@ -1629,10 +1637,15 @@ function startFlashCountdown(el) {
 
 function wireProductDetailActions(scope, product) {
   const qtyInput = scope.querySelector('.qty-input');
-  scope.querySelector('.qty-minus').addEventListener('click', () => {
+  const minusBtn = scope.querySelector('.qty-minus');
+  const plusBtn = scope.querySelector('.qty-plus');
+  // A pack-only product's detail view has no qty selector — it only shows a
+  // "Choisir mon pack" link, so there is nothing to wire here.
+  if (!qtyInput || !minusBtn || !plusBtn) return;
+  minusBtn.addEventListener('click', () => {
     qtyInput.value = Math.max(1, Number(qtyInput.value) - 1);
   });
-  scope.querySelector('.qty-plus').addEventListener('click', () => {
+  plusBtn.addEventListener('click', () => {
     qtyInput.value = Number(qtyInput.value) + 1;
   });
   const addBtn = scope.querySelector('.js-detail-add');
@@ -1710,7 +1723,15 @@ async function initNavExtras() {
       // Hiding a collection from the navbar (showInNav=false) must never hide
       // it from the site — it stays fully reachable via /collections.
       const collections = await api('/collections?nav=true');
-      panel.innerHTML = collections.map((c) => `<a href="#collection/${c.slug}">${c.name}</a>`).join('');
+      const cardsHTML = collections.map((c) => `
+        <a href="#collection/${c.slug}" class="nav-megamenu__item">
+          <span class="nav-megamenu__img" style="${c.image ? `background-image:url('${c.image}')` : ''}"></span>
+          <span class="nav-megamenu__body">
+            <span class="nav-megamenu__name">${c.name}</span>
+            ${c.description ? `<span class="nav-megamenu__desc">${c.description}</span>` : ''}
+          </span>
+        </a>`).join('');
+      panel.innerHTML = `<div class="nav-megamenu">${cardsHTML}</div>`;
     } catch (e) { /* ignore */ }
 
     const trigger = dropdown.querySelector('.nav-dropdown__trigger');
@@ -1997,11 +2018,13 @@ function initRevealAnimations() {
     cacheProducts(data.products);
     cachePacks(data.packs);
 
+    const packOnly = !!data.collection.packOnly;
+
     if (data.packs && data.packs.length) {
       const featuredIndex = data.packs.length === 3 ? 1 : -1;
       detailPacks.innerHTML = `
-        <p class="section__eyebrow">Formules</p>
-        <h3 class="section__title" style="margin-bottom:28px;font-size:26px;">Composez votre pack</h3>
+        <p class="section__eyebrow">${packOnly ? 'Sélection exclusive' : 'Formules'}</p>
+        <h3 class="section__title" style="margin-bottom:28px;font-size:26px;">${packOnly ? 'Choose Your Pack' : 'Composez votre pack'}</h3>
         <div class="packs__grid">
           ${data.packs.map((pack, i) => `
             <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
@@ -2010,14 +2033,24 @@ function initRevealAnimations() {
               <p class="pack-card__count">${pack.size} produits</p>
               <p class="pack-card__price">${pack.price} <span>MAD</span></p>
               <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
-              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">Composer</a>
+              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">${packOnly ? 'Choisir ce pack' : 'Composer'}</a>
             </div>`).join('')}
         </div>`;
       detailPacks.hidden = false;
     }
 
     currentCollectionProducts = data.products;
-    if (slug === 'parfums') {
+    if (packOnly) {
+      // Perfumes in a pack-only collection are never individually addable —
+      // browsing lands on the pack list above; picking a pack is what reveals
+      // "Now Choose Your Scents" (the existing composer flow) below.
+      genderFilter.hidden = true;
+      detailGrid.innerHTML = `
+        <div class="pack-only-notice">
+          <p>Ces parfums sont disponibles exclusivement au sein de nos packs.</p>
+          <p>Choisissez votre pack ci-dessus, puis composez votre sélection de parfums.</p>
+        </div>`;
+    } else if (slug === 'parfums') {
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');

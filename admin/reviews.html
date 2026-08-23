@@ -13,7 +13,10 @@
     <div class="admin-header">
       <div>
         <h1>Avis clients</h1>
-        <p>Validez les avis avant qu'ils n'apparaissent publiquement sur les fiches produit.</p>
+        <p>Validez les avis avant qu'ils n'apparaissent publiquement sur les fiches produit. Glissez-déposez pour réordonner leur affichage.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newReviewBtn">+ Ajouter un avis / témoignage</button>
       </div>
     </div>
 
@@ -65,7 +68,7 @@
 
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th>Produit</th><th>Note</th><th>Avis</th><th>Client</th><th>Commande</th><th>Date</th><th>Mis en avant</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th></th><th></th><th>Produit</th><th>Note</th><th>Avis</th><th>Client</th><th>Commande</th><th>Date</th><th>Accueil</th><th>Mis en avant</th><th>Statut</th><th></th></tr></thead>
         <tbody id="reviewsBody"></tbody>
       </table>
     </div>
@@ -87,13 +90,16 @@ function statusBadge(s) {
 
 function reviewRowHTML(r) {
   return `
-    <tr data-id="${r.id}">
+    <tr data-sortable-id="${r.id}" data-id="${r.id}" draggable="true">
+      <td class="drag-handle">⠿</td>
+      <td><div class="thumb-preview">${r.customerPhoto ? `<img src="${r.customerPhoto}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : ''}</div></td>
       <td>${r.product ? r.product.name : '—'}</td>
       <td style="color:#C9A227;">${stars(r.rating)}</td>
       <td style="max-width:260px;">${r.text || '<em style="color:var(--gray);">—</em>'}</td>
       <td>${r.customerName || '—'}</td>
       <td>${r.order ? r.order.orderNumber : '—'}</td>
       <td>${formatDate(r.createdAt)}</td>
+      <td><button data-action="toggle-homepage" class="admin-btn admin-btn--small ${r.showOnHomepage ? 'admin-btn--gold' : 'admin-btn--ghost'}">${r.showOnHomepage ? 'Oui' : 'Non'}</button></td>
       <td><button data-action="toggle-featured" class="admin-btn admin-btn--small ${r.featured ? 'admin-btn--gold' : 'admin-btn--ghost'}">${r.featured ? '★ Oui' : '☆ Non'}</button></td>
       <td>${statusBadge(r.status)}</td>
       <td class="row-actions">
@@ -117,7 +123,7 @@ async function loadReviews() {
   if (search) params.set('search', search);
   const qs = params.toString();
   reviews = await adminApi(`/reviews${qs ? `?${qs}` : ''}`);
-  document.getElementById('reviewsBody').innerHTML = reviews.map(reviewRowHTML).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--gray);">Aucun avis.</td></tr>';
+  document.getElementById('reviewsBody').innerHTML = reviews.map(reviewRowHTML).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--gray);">Aucun avis.</td></tr>';
 }
 
 async function loadSettings() {
@@ -167,6 +173,7 @@ document.getElementById('reviewsBody').addEventListener('click', async (e) => {
   if (btn.dataset.action === 'approve') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'APPROVED' }) }); toast('Avis approuvé.'); await loadReviews(); }
   if (btn.dataset.action === 'reject') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'REJECTED' }) }); toast('Avis rejeté.'); await loadReviews(); }
   if (btn.dataset.action === 'toggle-featured') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ featured: !review.featured }) }); await loadReviews(); }
+  if (btn.dataset.action === 'toggle-homepage') { await adminApi(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ showOnHomepage: !review.showOnHomepage }) }); await loadReviews(); }
   if (btn.dataset.action === 'edit') openEditModal(review);
   if (btn.dataset.action === 'delete') {
     const ok = await confirmDialog('Supprimer définitivement cet avis ?');
@@ -175,6 +182,43 @@ document.getElementById('reviewsBody').addEventListener('click', async (e) => {
   }
 });
 
+function reviewFormFieldsHTML(review, includeProduct) {
+  return `
+    ${includeProduct ? `<div class="admin-field"><label>Produit</label><select name="productId" required>${products.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')}</select></div>` : ''}
+    <div class="admin-field"><label>Nom du client</label><input name="customerName" value="${review && review.customerName || ''}"></div>
+    <div class="admin-field"><label>Note</label>
+      <select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option value="${n}" ${review && review.rating === n ? 'selected' : ''}>${n} étoile(s)</option>`).join('')}</select>
+    </div>
+    <div class="admin-field"><label>Texte de l'avis</label><textarea name="text" rows="4">${review && review.text || ''}</textarea></div>
+    <div class="admin-field">
+      <label>Photo du client (optionnel)</label>
+      <div id="photoPreview" style="margin-bottom:8px;">${review && review.customerPhoto ? `<img src="${review.customerPhoto}" style="width:64px;height:64px;object-fit:cover;border-radius:50%;">` : ''}</div>
+      <input type="file" id="photoUpload" accept="image/*">
+      <input type="hidden" name="customerPhoto" value="${review && review.customerPhoto || ''}">
+    </div>
+    <div class="admin-field">
+      <label>Vidéo du client (URL, optionnel)</label>
+      <input name="customerVideo" value="${review && review.customerVideo || ''}" placeholder="https://...">
+    </div>
+    <label class="admin-checkbox"><input type="checkbox" name="showOnHomepage" ${review && review.showOnHomepage ? 'checked' : ''}> Afficher sur la page d'accueil</label>
+  `;
+}
+
+function wireReviewMediaUpload(overlay) {
+  const upload = overlay.querySelector('#photoUpload');
+  if (!upload) return;
+  upload.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      overlay.querySelector('[name="customerPhoto"]').value = result.url;
+      overlay.querySelector('#photoPreview').innerHTML = `<img src="${result.url}" style="width:64px;height:64px;object-fit:cover;border-radius:50%;">`;
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
 function openEditModal(review) {
   const overlay = document.createElement('div');
   overlay.className = 'admin-modal-overlay';
@@ -182,11 +226,7 @@ function openEditModal(review) {
     <div class="admin-modal">
       <div class="admin-modal__header"><h2>Modifier l'avis</h2><button class="admin-modal__close" data-close>&times;</button></div>
       <form class="admin-form" id="editReviewForm">
-        <div class="admin-field"><label>Nom du client</label><input name="customerName" value="${review.customerName || ''}"></div>
-        <div class="admin-field"><label>Note</label>
-          <select name="rating">${[5, 4, 3, 2, 1].map((n) => `<option value="${n}" ${review.rating === n ? 'selected' : ''}>${n} étoile(s)</option>`).join('')}</select>
-        </div>
-        <div class="admin-field"><label>Texte de l'avis</label><textarea name="text" rows="4">${review.text || ''}</textarea></div>
+        ${reviewFormFieldsHTML(review, false)}
         <div class="admin-modal__actions">
           <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
           <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
@@ -196,13 +236,18 @@ function openEditModal(review) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  wireReviewMediaUpload(overlay);
   document.getElementById('editReviewForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
       await adminApi(`/reviews/${review.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ customerName: fd.get('customerName'), rating: fd.get('rating'), text: fd.get('text') }),
+        body: JSON.stringify({
+          customerName: fd.get('customerName'), rating: fd.get('rating'), text: fd.get('text'),
+          customerPhoto: fd.get('customerPhoto') || null, customerVideo: fd.get('customerVideo') || null,
+          showOnHomepage: fd.get('showOnHomepage') === 'on',
+        }),
       });
       toast('Avis mis à jour.');
       overlay.remove();
@@ -211,6 +256,46 @@ function openEditModal(review) {
   });
 }
 
+function openCreateModal() {
+  if (!products.length) { toast('Créez d\'abord un produit.', 'error'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>Ajouter un avis / témoignage</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="createReviewForm">
+        ${reviewFormFieldsHTML(null, true)}
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">Créer</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  wireReviewMediaUpload(overlay);
+  document.getElementById('createReviewForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await adminApi('/reviews', {
+        method: 'POST',
+        body: JSON.stringify({
+          productId: fd.get('productId'), customerName: fd.get('customerName'), rating: fd.get('rating'), text: fd.get('text'),
+          customerPhoto: fd.get('customerPhoto') || null, customerVideo: fd.get('customerVideo') || null,
+          showOnHomepage: fd.get('showOnHomepage') === 'on',
+        }),
+      });
+      toast('Avis créé.');
+      overlay.remove();
+      await loadReviews();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+document.getElementById('newReviewBtn').addEventListener('click', () => openCreateModal());
+
 (async () => {
   const admin = await initAdminPage('reviews.html');
   if (!admin) return;
@@ -218,6 +303,11 @@ function openEditModal(review) {
   document.getElementById('productFilter').innerHTML = '<option value="">Tous les produits</option>' +
     products.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
   await Promise.all([loadSettings(), loadReviews()]);
+  makeSortable(document.getElementById('reviewsBody'), async (orderedIds) => {
+    await adminApi('/reviews/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.');
+    await loadReviews();
+  });
 })();
 </script>
 </body>

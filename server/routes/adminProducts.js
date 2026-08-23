@@ -29,7 +29,23 @@ function withGendersArray(product) {
   let genders = [];
   try { genders = JSON.parse(product.genders || '[]'); } catch (e) { genders = []; }
   if (genders.length === 0 && product.gender) genders = [product.gender];
-  return { ...product, genders };
+  const characteristicIds = Array.isArray(product.characteristics)
+    ? product.characteristics.map((c) => c.characteristicId)
+    : undefined;
+  const out = { ...product, genders };
+  if (characteristicIds) out.characteristicIds = characteristicIds;
+  return out;
+}
+
+async function setProductCharacteristics(productId, characteristicIds) {
+  if (!Array.isArray(characteristicIds)) return;
+  await prisma.productCharacteristic.deleteMany({ where: { productId } });
+  if (characteristicIds.length) {
+    await prisma.productCharacteristic.createMany({
+      data: characteristicIds.map((characteristicId) => ({ productId, characteristicId })),
+      skipDuplicates: true,
+    });
+  }
 }
 
 router.get('/', async (req, res) => {
@@ -44,7 +60,7 @@ router.get('/', async (req, res) => {
   }
   const products = await prisma.product.findMany({
     where,
-    include: { collection: true },
+    include: { collection: true, characteristics: true },
     orderBy: [{ collectionId: 'asc' }, { position: 'asc' }],
   });
   res.json(products.map(withGendersArray));
@@ -53,7 +69,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const product = await prisma.product.findUnique({
     where: { id: req.params.id },
-    include: { collection: true, packProducts: true, freePackProducts: true },
+    include: { collection: true, packProducts: true, freePackProducts: true, characteristics: true },
   });
   if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
   res.json(withGendersArray(product));
@@ -99,6 +115,7 @@ router.post('/', async (req, res) => {
       flashSaleLabel: body.flashSaleLabel || null,
     },
   });
+  await setProductCharacteristics(product.id, body.characteristicIds);
   res.status(201).json(product);
 });
 
@@ -128,6 +145,7 @@ router.put('/:id', async (req, res) => {
 
   try {
     const product = await prisma.product.update({ where: { id: req.params.id }, data });
+    await setProductCharacteristics(product.id, body.characteristicIds);
     res.json(product);
   } catch (e) {
     res.status(404).json({ error: 'Produit introuvable.' });

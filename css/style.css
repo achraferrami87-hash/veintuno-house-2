@@ -151,21 +151,61 @@ em { font-style: italic; color: var(--gold); }
 .icon-btn svg { width: 20px; height: 20px; }
 
 .nav-dropdown { position: relative; }
+/* The panel itself is an invisible hover-bridge spanning from the trigger
+   down to the visual card below (padding-top, not a positional gap) — this
+   keeps `:hover` unbroken while the cursor travels from the trigger into the
+   menu, instead of dropping through a dead zone and closing the menu. */
 .nav-dropdown__panel {
-  position: absolute; top: calc(100% + 20px); left: 50%; transform: translateX(-50%) translateY(6px);
-  background: var(--white); border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 20px 50px rgba(0,0,0,0.12);
-  min-width: 220px; padding: 10px 0;
-  opacity: 0; visibility: hidden; transition: opacity 0.2s ease, transform 0.2s ease;
-  display: flex; flex-direction: column; z-index: 50;
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  padding-top: 20px;
+  opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
+  z-index: 50; pointer-events: none;
+}
+.nav-dropdown.is-open .nav-dropdown__panel,
+.nav-dropdown:hover .nav-dropdown__panel {
+  opacity: 1; visibility: visible; pointer-events: auto;
 }
 .nav-dropdown__panel a {
   padding: 10px 22px; font-size: 12px; letter-spacing: 0.5px; text-transform: none;
   transition: background 0.15s;
 }
 .nav-dropdown__panel a:hover { background: var(--cream); color: var(--gold); }
-.nav-dropdown.is-open .nav-dropdown__panel,
-.nav-dropdown:hover .nav-dropdown__panel {
-  opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0);
+
+.pack-only-notice {
+  text-align: center; max-width: 520px; margin: 40px auto 60px;
+  font-family: var(--serif); font-size: 17px; line-height: 1.8; color: var(--gray);
+  padding: 34px 30px; border-top: 1px solid rgba(212,175,55,0.3); border-bottom: 1px solid rgba(212,175,55,0.3);
+}
+.pack-only-notice p:first-child { color: var(--black); margin-bottom: 6px; }
+[data-theme="sombre"] .pack-only-notice p:first-child { color: #f3efe6; }
+[data-theme="sombre"] .pack-only-notice { color: #b8b0a0; }
+
+/* Collections mega-menu — rendered inside #collectionsDropdownPanel */
+.nav-megamenu {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px; min-width: 480px; max-width: 720px;
+  background: var(--white); border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 20px 50px rgba(0,0,0,0.12);
+  padding: 18px; transform: translateY(6px); transition: transform 0.25s ease;
+}
+.nav-dropdown.is-open .nav-megamenu,
+.nav-dropdown:hover .nav-megamenu { transform: translateY(0); }
+.nav-megamenu__item {
+  display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 2px;
+  transition: background 0.2s ease;
+}
+.nav-megamenu__item:hover { background: var(--cream); }
+.nav-megamenu__img {
+  width: 100%; aspect-ratio: 4 / 3; background-size: cover; background-position: center;
+  background-color: var(--cream); border: 1px solid rgba(0,0,0,0.06);
+  transition: transform 0.4s ease;
+}
+.nav-megamenu__item:hover .nav-megamenu__img { transform: scale(1.03); }
+.nav-megamenu__name {
+  font-family: var(--serif); font-size: 14px; letter-spacing: 0.4px; color: var(--black); text-transform: none;
+}
+.nav-megamenu__desc {
+  display: block; font-size: 11px; letter-spacing: 0.2px; text-transform: none;
+  color: var(--gray); margin-top: 3px; line-height: 1.5;
 }
 
 .nav-toggle { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; }
@@ -1053,7 +1093,7 @@ em { font-style: italic; color: var(--gold); }
 /* ===========================
    Gender filter (Parfums collection)
 =========================== */
-.gender-filter { display: flex; gap: 10px; margin-bottom: 40px; flex-wrap: wrap; }
+.gender-filter:not([hidden]) { display: flex; gap: 10px; margin-bottom: 40px; flex-wrap: wrap; }
 .gender-filter__chip {
   padding: 9px 20px; border: 1px solid rgba(0,0,0,0.15); font-size: 12px;
   letter-spacing: 0.8px; text-transform: uppercase; cursor: pointer; transition: all 0.2s ease;
@@ -1090,6 +1130,9 @@ em { font-style: italic; color: var(--gold); }
 .qty-selector button:hover { background: var(--cream); }
 .qty-selector input { width: 46px; height: 48px; border: none; border-left: 1px solid rgba(0,0,0,0.15); border-right: 1px solid rgba(0,0,0,0.15); text-align: center; font-family: inherit; font-size: 14px; }
 .product-detail__actions .btn { flex: 1; min-width: 180px; }
+.product-detail__pack-only { margin-top: 4px; }
+.product-detail__pack-only p { font-family: var(--serif); font-size: 15px; color: var(--gray); margin-bottom: 12px; }
+[data-theme="sombre"] .product-detail__pack-only p { color: #b8b0a0; }
 
 /* ===========================
    Pack Chooser
@@ -1285,8 +1328,15 @@ a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba
   .nav a, .nav-cta-link { padding: 14px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); width: 100%; }
   .nav-dropdown { width: 100%; }
   .nav-dropdown__trigger { padding: 14px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); width: 100%; justify-content: space-between; }
-  .nav-dropdown__panel { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; border: none; display: none; }
+  .nav-dropdown__panel { position: static; opacity: 1; visibility: visible; padding-top: 0; display: none; }
   .nav-dropdown.is-open .nav-dropdown__panel { display: flex; }
+  .nav-megamenu {
+    grid-template-columns: 1fr; min-width: 0; max-width: none; width: 100%;
+    box-shadow: none; border: none; transform: none; padding: 0;
+  }
+  .nav-megamenu__item { flex-direction: row; align-items: center; padding: 12px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+  .nav-megamenu__img { width: 44px; height: 44px; aspect-ratio: auto; flex-shrink: 0; }
+  .nav-megamenu__desc { display: none; }
   .nav-toggle { display: flex; }
   .product-detail__layout { grid-template-columns: 1fr; }
   .product-detail__visual { min-height: 320px; }
@@ -1470,7 +1520,11 @@ a { transition: color 0.2s ease; }
 [data-theme="sombre"] .theme-switch { border-color: rgba(255,255,255,0.2); }
 [data-theme="sombre"] .theme-switch__option { color: #b8b0a0; }
 [data-theme="sombre"] .theme-switch__option.is-active { background: var(--gold); color: var(--black); }
-[data-theme="sombre"] .nav-dropdown__panel { background: #1b1917; border-color: rgba(255,255,255,0.08); }
+[data-theme="sombre"] .nav-megamenu { background: #1b1917; border-color: rgba(255,255,255,0.08); }
+[data-theme="sombre"] .nav-megamenu__item:hover { background: #241f1a; }
+[data-theme="sombre"] .nav-megamenu__name { color: #f3efe6; }
+[data-theme="sombre"] .nav-megamenu__desc { color: #b8b0a0; }
+[data-theme="sombre"] .nav-megamenu__img { background-color: #241f1a; border-color: rgba(255,255,255,0.08); }
 [data-theme="sombre"] .btn--outline { border-color: #f3efe6; color: #f3efe6; }
 [data-theme="sombre"] .btn--outline:hover { background: #f3efe6; color: #111; }
 [data-theme="sombre"] .product-card, [data-theme="sombre"] .review-item, [data-theme="sombre"] .chooser-card,
@@ -1506,9 +1560,9 @@ a { transition: color 0.2s ease; }
 [data-theme="sombre"] .admin-field-help { color: #a39c8c; }
 [data-theme="sombre"] .collections-page, [data-theme="sombre"] .packs, [data-theme="sombre"] .testimonials,
 [data-theme="sombre"] .collection--femme { background: #111111; }
-[data-theme="sombre"] .nav-dropdown__panel, [data-theme="sombre"] .search-overlay__bar,
+[data-theme="sombre"] .search-overlay__bar,
 [data-theme="sombre"] .search-overlay__results { background: #1b1917; }
-[data-theme="sombre"] .nav-dropdown__panel a:hover, [data-theme="sombre"] .search-result:hover { background: #241f1a; }
+[data-theme="sombre"] .search-result:hover { background: #241f1a; }
 [data-theme="sombre"] .search-overlay__bar input { color: #f3efe6; }
 [data-theme="sombre"] .search-result { border-color: rgba(255,255,255,0.08); color: #f3efe6; }
 [data-theme="sombre"] .nav-toggle span { background: #f3efe6; }

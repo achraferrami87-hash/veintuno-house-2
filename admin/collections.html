@@ -22,7 +22,7 @@
 
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th></th><th></th><th>Nom</th><th>Slug</th><th>Produits</th><th>Packs</th><th>Statut</th><th>Navbar</th><th></th></tr></thead>
+        <thead><tr><th></th><th></th><th>Nom</th><th>Slug</th><th>Produits</th><th>Packs</th><th>Statut</th><th>Navbar</th><th>Vente</th><th></th></tr></thead>
         <tbody id="collectionsBody"></tbody>
       </table>
     </div>
@@ -44,6 +44,7 @@ function rowHTML(c) {
       <td>${c._count ? c._count.packs : 0}</td>
       <td>${c.isActive ? '<span class="badge badge--green">Visible</span>' : '<span class="badge badge--gray">Masquée</span>'}</td>
       <td>${c.showInNav ? '<span class="badge badge--gold">Dans le menu</span>' : '<span class="badge badge--gray">Masquée du menu</span>'}</td>
+      <td>${c.packOnly ? '<span class="badge badge--gold">Pack uniquement</span>' : '<span class="badge badge--gray">Individuelle</span>'}</td>
       <td class="row-actions">
         <button data-action="edit">Modifier</button>
         <button data-action="toggle">${c.isActive ? 'Masquer' : 'Afficher'}</button>
@@ -103,6 +104,8 @@ function openModal(collection) {
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || collection.isActive ? 'checked' : ''}> Visible sur le site</label>
         <label class="admin-checkbox"><input type="checkbox" name="showInNav" ${!isEdit || collection.showInNav ? 'checked' : ''}> Afficher dans le menu de navigation</label>
         <p class="admin-field-help">Retirer une collection du menu ne la supprime jamais du site — elle reste accessible via la page Collections.</p>
+        <label class="admin-checkbox"><input type="checkbox" name="packOnly" ${isEdit && collection.packOnly ? 'checked' : ''}> Vente uniquement en pack</label>
+        <p class="admin-field-help">Si coché, les produits de cette collection ne peuvent pas être ajoutés au panier individuellement — le client doit d'abord choisir un pack.</p>
         <div class="admin-modal__actions">
           <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
           <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
@@ -127,7 +130,7 @@ function openModal(collection) {
   document.getElementById('collectionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on' };
+    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on', packOnly: fd.get('packOnly') === 'on' };
     try {
       if (isEdit) await adminApi(`/collections/${collection.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await adminApi('/collections', { method: 'POST', body: JSON.stringify(payload) });

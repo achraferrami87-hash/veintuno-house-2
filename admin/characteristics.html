@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caractéristiques — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Caractéristiques olfactives</h1>
+        <p>Le vocabulaire de tags utilisé pour taguer les produits (Produits → caractéristiques), pour la recherche intelligente et pour le quiz "Find Your Scent". Glissez-déposez pour réordonner.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newBtn">+ Nouvelle caractéristique</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th></th><th>Nom</th><th>Produits taggués</th><th></th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucune caractéristique — ajoutez-en une (ex. Fresh, Woody, Citrus, Elegant, Summer...).</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let items = [];
+
+function rowHTML(c) {
+  return `
+    <tr data-sortable-id="${c.id}" data-id="${c.id}" draggable="true">
+      <td class="drag-handle">⠿</td>
+      <td><strong id="name-${c.id}">${c.name}</strong></td>
+      <td>${c._count ? c._count.products : 0}</td>
+      <td class="row-actions">
+        <button data-action="rename">Renommer</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  items = await adminApi('/characteristics');
+  document.getElementById('body').innerHTML = items.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+}
+
+document.getElementById('body').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const item = items.find((c) => c.id === id);
+
+  if (btn.dataset.action === 'rename') {
+    const name = prompt('Nouveau nom :', item.name);
+    if (!name || !name.trim()) return;
+    try {
+      await adminApi(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify({ name: name.trim() }) });
+      toast('Caractéristique mise à jour.');
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer "${item.name}" ? Elle sera retirée de tous les produits taggués.`);
+    if (!ok) return;
+    try {
+      await adminApi(`/characteristics/${id}`, { method: 'DELETE' });
+      toast('Caractéristique supprimée.');
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+document.getElementById('newBtn').addEventListener('click', async () => {
+  const name = prompt('Nom de la caractéristique (ex. Fresh, Woody, Citrus, Elegant, Summer) :');
+  if (!name || !name.trim()) return;
+  try {
+    await adminApi('/characteristics', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+    toast('Caractéristique créée.');
+    await loadAll();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+(async () => {
+  const admin = await initAdminPage('characteristics.html');
+  if (!admin) return;
+  await loadAll();
+  makeSortable(document.getElementById('body'), async (orderedIds) => {
+    await adminApi('/characteristics/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.');
+    await loadAll();
+  });
+})();
+</script>
+</body>
+</html>

@@ -31,6 +31,11 @@ model Collection {
   position    Int      @default(0)
   isActive    Boolean  @default(true)
   showInNav   Boolean  @default(true)
+  // When true, this collection's products are sold ONLY as part of a Pack —
+  // the storefront hides standalone add-to-cart for them and routes browsing
+  // straight into the pack chooser. Off by default so existing collections
+  // (e.g. gel douche) keep selling individually exactly as before.
+  packOnly    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -89,6 +94,29 @@ model Product {
   promoCodeProducts    PromoCodeProduct[]
   bundleItems          BundleItem[]
   reviews              Review[]
+  characteristics      ProductCharacteristic[]
+}
+
+// ===========================
+// FRAGRANCE CHARACTERISTICS — shared tag vocabulary used to (a) tag products
+// for the "Find Your Scent" quiz matching and (b) power smarter search.
+// Admin-managed (add/rename/reorder/delete) — no hardcoded tag list.
+// ===========================
+model Characteristic {
+  id       String @id @default(cuid())
+  name     String @unique
+  position Int    @default(0)
+
+  products ProductCharacteristic[]
+}
+
+model ProductCharacteristic {
+  productId        String
+  characteristicId String
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+
+  @@id([productId, characteristicId])
 }
 
 // ===========================
@@ -444,6 +472,10 @@ model Review {
   rating       Int
   text         String?
   customerName String?
+  customerPhoto   String?
+  customerVideo   String?
+  showOnHomepage  Boolean  @default(false)
+  position        Int      @default(0)
   status       String   @default("PENDING") // PENDING | APPROVED | REJECTED
   featured     Boolean  @default(false)
   createdAt    DateTime @default(now())

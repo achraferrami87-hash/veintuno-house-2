@@ -52,6 +52,7 @@
 <script>
 let allProducts = [];
 let collections = [];
+let characteristics = [];
 
 function productRowHTML(p) {
   const col = collections.find((c) => c.id === p.collectionId);
@@ -109,7 +110,7 @@ function renderTable() {
 }
 
 async function loadAll() {
-  [allProducts, collections] = await Promise.all([adminApi('/products'), adminApi('/collections')]);
+  [allProducts, collections, characteristics] = await Promise.all([adminApi('/products'), adminApi('/collections'), adminApi('/characteristics')]);
   const filterSelect = document.getElementById('collectionFilter');
   filterSelect.innerHTML = '<option value="">Toutes les collections</option>' +
     collections.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -180,6 +181,12 @@ function openProductModal(product) {
             <label class="admin-checkbox"><input type="checkbox" name="genders" value="homme" ${isEdit && product.genders && product.genders.includes('homme') ? 'checked' : ''}> Homme</label>
             <label class="admin-checkbox"><input type="checkbox" name="genders" value="femme" ${isEdit && product.genders && product.genders.includes('femme') ? 'checked' : ''}> Femme</label>
             <label class="admin-checkbox"><input type="checkbox" name="genders" value="unisexe" ${isEdit && product.genders && product.genders.includes('unisexe') ? 'checked' : ''}> Unisexe</label>
+          </div>
+        </div>
+        <div class="admin-field">
+          <label>Caractéristiques olfactives (recherche intelligente + quiz "Find Your Scent")</label>
+          <div class="admin-checkbox-grid">
+            ${characteristics.length ? characteristics.map((c) => `<label class="admin-checkbox"><input type="checkbox" name="characteristicIds" value="${c.id}" ${isEdit && (product.characteristicIds || []).includes(c.id) ? 'checked' : ''}> ${c.name}</label>`).join('') : '<p class="admin-field-help">Aucune caractéristique définie — gérez-les dans Réglages → Caractéristiques.</p>'}
           </div>
         </div>
         <div class="admin-field"><label>Description longue</label><textarea name="description">${isEdit ? (product.description || '') : ''}</textarea></div>
@@ -282,7 +289,7 @@ function openProductModal(product) {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
       price: fd.get('price'), stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
-      genders: fd.getAll('genders'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      genders: fd.getAll('genders'), characteristicIds: fd.getAll('characteristicIds'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
       images,
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',
