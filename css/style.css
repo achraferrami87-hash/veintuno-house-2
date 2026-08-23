@@ -401,6 +401,28 @@ em { font-style: italic; color: var(--gold); }
 .testimonial p { font-size: 15px; color: #333; margin-bottom: 18px; }
 .testimonial cite { font-style: normal; font-size: 13px; color: var(--gray); letter-spacing: 0.5px; }
 
+/* Client Experience (dashboard-managed reviews with photo/video) */
+.client-reviews { padding: 110px 0; background: var(--white); text-align: center; }
+.client-reviews__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 28px;
+  text-align: left;
+}
+.client-review-card {
+  background: var(--cream); padding: 30px 26px; border: 1px solid rgba(0,0,0,0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.client-review-card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,0.08); }
+.client-review-card__photo { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; margin-bottom: 14px; }
+.client-review-card__stars { color: var(--gold); letter-spacing: 3px; margin-bottom: 14px; font-size: 14px; }
+.client-review-card__text { font-size: 15px; color: #333; line-height: 1.7; margin-bottom: 16px; }
+.client-review-card__video { display: inline-block; font-size: 12px; color: var(--gold); text-decoration: underline; margin-bottom: 12px; }
+.client-review-card__name { font-size: 13px; color: var(--gray); letter-spacing: 0.4px; }
+[data-theme="sombre"] .client-reviews { background: #111111; }
+[data-theme="sombre"] .client-review-card { background: #1b1917; border-color: rgba(255,255,255,0.08); }
+[data-theme="sombre"] .client-review-card__text { color: #cfc9ba; }
+
 /* Footer */
 .footer { background: var(--black); color: #cfcac0; padding-top: 80px; }
 .footer__inner {
@@ -682,6 +704,64 @@ em { font-style: italic; color: var(--gold); }
 }
 
 #packModalViewCart { margin-top: 8px; }
+
+/* ===========================
+   FIND YOUR SCENT — entry CTA + quiz modal
+=========================== */
+.find-scent-cta {
+  text-align: center; max-width: 480px; margin: 0 auto 50px; padding: 36px 30px;
+  border: 1px solid rgba(212,175,55,0.35); background: var(--cream);
+}
+.find-scent-cta__eyebrow { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+.find-scent-cta h3 { font-family: var(--serif); font-size: 22px; line-height: 1.4; margin-bottom: 20px; }
+[data-theme="sombre"] .find-scent-cta { background: #1b1917; border-color: rgba(212,175,55,0.25); }
+
+.quiz-modal__panel { max-width: 640px; }
+.quiz-progress { display: flex; gap: 8px; justify-content: center; margin-bottom: 28px; }
+.quiz-progress__dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(0,0,0,0.12); transition: background 0.3s ease; }
+.quiz-progress__dot.is-active { background: var(--gold); }
+.quiz-progress__dot.is-done { background: rgba(212,175,55,0.4); }
+[data-theme="sombre"] .quiz-progress__dot { background: rgba(255,255,255,0.15); }
+
+.quiz-question-count { text-align: center; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gray); margin-bottom: 10px; }
+.quiz-question-text { text-align: center; font-family: var(--serif); font-size: 26px; margin-bottom: 30px; }
+.quiz-answers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.quiz-answer-card {
+  padding: 22px 16px; border: 1px solid rgba(0,0,0,0.12); background: var(--white); cursor: pointer;
+  font-family: var(--serif); font-size: 16px; text-align: center; transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
+}
+.quiz-answer-card:hover { border-color: var(--gold); background: var(--cream); transform: translateY(-3px); }
+[data-theme="sombre"] .quiz-answer-card { background: #1b1917; border-color: rgba(255,255,255,0.12); color: #f3efe6; }
+[data-theme="sombre"] .quiz-answer-card:hover { border-color: var(--gold); background: #241f1a; }
+.quiz-back-btn {
+  display: block; margin: 26px auto 0; background: none; border: none; cursor: pointer;
+  font-size: 12px; letter-spacing: 0.5px; color: var(--gray); text-decoration: underline;
+}
+
+.quiz-results { text-align: center; }
+.quiz-results h3 { font-family: var(--serif); font-size: 24px; margin: 6px 0 26px; }
+.quiz-results__list { display: flex; flex-direction: column; gap: 16px; margin-bottom: 26px; }
+.quiz-result-card {
+  display: flex; align-items: center; gap: 18px; text-align: left; padding: 16px;
+  border: 1px solid rgba(0,0,0,0.08); position: relative;
+}
+[data-theme="sombre"] .quiz-result-card { border-color: rgba(255,255,255,0.1); }
+.quiz-result-card__rank {
+  position: absolute; top: -10px; left: -10px; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--black); color: var(--gold); font-size: 12px; display: flex; align-items: center; justify-content: center;
+}
+.quiz-result-card__media { width: 72px; height: 90px; flex-shrink: 0; background: var(--cream); display: flex; align-items: center; justify-content: center; }
+.quiz-result-card__media svg, .quiz-result-card__media img { max-width: 100%; max-height: 100%; }
+.quiz-result-card__body h4 { font-family: var(--serif); font-size: 17px; margin-bottom: 4px; }
+.quiz-result-card__notes { font-size: 12px; color: var(--gray); margin-bottom: 6px; }
+.quiz-result-card__match { font-size: 13px; color: var(--gold); font-weight: 500; letter-spacing: 0.3px; margin-bottom: 4px; }
+.quiz-result-card__why { font-size: 12px; color: var(--gray); line-height: 1.5; }
+.quiz-results__note { font-size: 13px; color: var(--gray); margin-bottom: 18px; font-style: italic; }
+
+@media (max-width: 640px) {
+  .quiz-question-text { font-size: 21px; }
+  .quiz-answer-card { padding: 18px 12px; font-size: 14px; }
+}
 
 /* ===========================
    HEADER — cart icon (base sizing/position comes from .icon-btn)
@@ -1273,7 +1353,13 @@ a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba
 .contact-card h3 { font-family: var(--serif); font-size: 22px; font-weight: 600; }
 .contact-card p { font-size: 14px; color: #444; max-width: 320px; }
 .contact-card__cta { font-size: 13px; letter-spacing: 0.5px; color: var(--gold); font-weight: 500; }
-.contact-card__qr { width: 140px; height: 140px; object-fit: contain; background: var(--white); padding: 10px; }
+.contact-card__qr-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 22px; margin: 4px 0; border: 1px solid rgba(212,175,55,0.35); background: var(--white);
+}
+.contact-card__qr-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+.contact-card__qr { width: 220px; height: 220px; max-width: 60vw; object-fit: contain; padding: 6px; }
+[data-theme="sombre"] .contact-card__qr-wrap { background: #1b1917; border-color: rgba(212,175,55,0.25); }
 
 /* ===========================
    Loyalty page

@@ -102,6 +102,12 @@ try {
 
     <div class="collection-detail__packs" id="collectionDetailPacks" hidden></div>
 
+    <div class="find-scent-cta" id="findScentCta" hidden>
+      <p class="find-scent-cta__eyebrow">Indécis ?</p>
+      <h3>Can't choose your scent?<br>Let us help.</h3>
+      <button type="button" class="btn btn--gold" id="findScentBtn">FIND YOUR SCENT</button>
+    </div>
+
     <div class="gender-filter" id="genderFilter" hidden>
       <div class="gender-filter__chip is-active" data-gender="">Tous</div>
       <div class="gender-filter__chip" data-gender="homme">Homme</div>
@@ -195,6 +201,22 @@ try {
     <p>© 2026 VEINTUNO HOUSE. Tous droits réservés.</p>
   </div>
 </footer>
+
+<!-- FIND YOUR SCENT (quiz) -->
+<div class="pack-modal quiz-modal" id="quizModal" aria-hidden="true">
+  <div class="pack-modal__backdrop" id="quizBackdrop"></div>
+  <div class="pack-modal__panel quiz-modal__panel" role="dialog" aria-modal="true">
+    <div class="pack-modal__header">
+      <div><p class="section__eyebrow">Find Your Scent</p><h2>Une consultation olfactive sur mesure</h2></div>
+      <button type="button" class="pack-modal__close" id="quizClose" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="pack-modal__body">
+      <div id="quizBody"></div>
+    </div>
+  </div>
+</div>
 
 <!-- QUICK VIEW -->
 <div class="pack-modal" id="quickViewModal" aria-hidden="true">

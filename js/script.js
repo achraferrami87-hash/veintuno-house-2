@@ -797,6 +797,55 @@ function bundlesSectionHTML(section) {
     </section>`;
 }
 
+function packsSectionHTML(section) {
+  const packs = section.config.packs || [];
+  if (!packs.length) return '';
+  cachePacks(packs);
+  const featuredIndex = packs.length === 3 ? 1 : -1;
+  return `
+    <section class="packs">
+      <div class="container">
+        <p class="section__eyebrow">${section.title || 'Formules'}</p>
+        <h2 class="section__title">${section.subtitle || 'Composez votre pack'}</h2>
+        <div class="packs__grid">
+          ${packs.map((pack, i) => `
+            <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
+              ${i === featuredIndex ? '<span class="pack-card__badge">Le plus choisi</span>' : ''}
+              <h3>${pack.name}</h3>
+              <p class="pack-card__count">${pack.size} produits</p>
+              <p class="pack-card__price">${pack.price} <span>MAD</span></p>
+              <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
+              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">Composer</a>
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>`;
+}
+
+function clientReviewCardHTML(r) {
+  return `
+    <article class="client-review-card reveal">
+      ${r.customerPhoto ? `<img class="client-review-card__photo" src="${r.customerPhoto}" alt="${r.customerName || 'Client'}">` : ''}
+      <div class="client-review-card__stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div>
+      ${r.text ? `<p class="client-review-card__text">« ${r.text} »</p>` : ''}
+      ${r.customerVideo ? `<a href="${r.customerVideo}" target="_blank" rel="noopener" class="client-review-card__video">▶ Voir la vidéo</a>` : ''}
+      <p class="client-review-card__name">${r.customerName || 'Client VEINTUNO'}${r.product ? ` — ${r.product.name}` : ''}</p>
+    </article>`;
+}
+
+function clientReviewsSectionHTML(section) {
+  const reviews = section.config.reviews || [];
+  if (!reviews.length) return '';
+  return `
+    <section class="client-reviews">
+      <div class="container">
+        <p class="section__eyebrow">${section.title || 'Témoignages'}</p>
+        <h2 class="section__title">${section.subtitle || 'Ce que nos clientes en disent'}</h2>
+        <div class="client-reviews__grid">${reviews.map(clientReviewCardHTML).join('')}</div>
+      </div>
+    </section>`;
+}
+
 function promoBannerSectionHTML(section) {
   return `
     <section class="promo-banner">
@@ -815,6 +864,8 @@ const SECTION_RENDERERS = {
   TEXT_IMAGE: textImageSectionHTML,
   TESTIMONIALS: testimonialsSectionHTML,
   PROMO_BANNER: promoBannerSectionHTML,
+  PACKS: packsSectionHTML,
+  CLIENT_REVIEWS: clientReviewsSectionHTML,
 };
 
 async function initHomepage() {
@@ -1810,7 +1861,11 @@ async function initContactPage() {
         <div class="contact-card__icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor"/></svg></div>
         <h3>Instagram</h3>
         <p>Suivez-nous pour les nouveautés, les coulisses et les offres exclusives.</p>
-        ${settings.instagramQrImage ? `<img class="contact-card__qr" src="${settings.instagramQrImage}" alt="QR Code Instagram">` : ''}
+        ${settings.instagramQrImage ? `
+        <div class="contact-card__qr-wrap">
+          <p class="contact-card__qr-label">Scannez pour nous suivre</p>
+          <img class="contact-card__qr" src="${settings.instagramQrImage}" alt="QR Code Instagram">
+        </div>` : ''}
         ${settings.instagramLink ? `<a href="${settings.instagramLink}" target="_blank" rel="noopener" class="contact-card__cta">Voir le profil →</a>` : ''}
       </div>`);
     if (settings.instagramLink) { footerInstagram.href = settings.instagramLink; footerInstagram.hidden = false; }
@@ -1940,7 +1995,7 @@ async function initLoyaltyPage() {
 // ===========================
 function initRevealAnimations() {
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const targets = document.querySelectorAll('#homepageSections > section, .products__grid .product-card');
+  const targets = document.querySelectorAll('#homepageSections > section, .products__grid .product-card, .client-reviews__grid .client-review-card');
   if (reduced || !('IntersectionObserver' in window)) {
     targets.forEach((el) => el.classList.add('is-visible'));
     return;
@@ -1970,6 +2025,7 @@ function initRevealAnimations() {
   const detailGrid = document.getElementById('collectionDetailGrid');
   const detailPacks = document.getElementById('collectionDetailPacks');
   const genderFilter = document.getElementById('genderFilter');
+  const findScentCta = document.getElementById('findScentCta');
 
   if (!viewHome || !viewCollections || !viewDetail) return;
 
@@ -2045,16 +2101,19 @@ function initRevealAnimations() {
       // browsing lands on the pack list above; picking a pack is what reveals
       // "Now Choose Your Scents" (the existing composer flow) below.
       genderFilter.hidden = true;
+      if (findScentCta) findScentCta.hidden = false;
       detailGrid.innerHTML = `
         <div class="pack-only-notice">
           <p>Ces parfums sont disponibles exclusivement au sein de nos packs.</p>
           <p>Choisissez votre pack ci-dessus, puis composez votre sélection de parfums.</p>
         </div>`;
     } else if (slug === 'parfums') {
+      if (findScentCta) findScentCta.hidden = true;
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');
     } else {
+      if (findScentCta) findScentCta.hidden = true;
       genderFilter.hidden = true;
       detailGrid.innerHTML = data.products.map(productCardHTML).join('');
       initRevealAnimations();
@@ -2188,6 +2247,126 @@ async function initThemeSwitch() {
   });
 }
 
+// ===========================
+// FIND YOUR SCENT — dashboard-configured fragrance-matching quiz.
+// Never bypasses the pack system: results always end at "Choose your pack,"
+// never a direct add-to-cart, since perfumes cannot be bought standalone.
+// ===========================
+function initFindYourScent() {
+  const modal = document.getElementById('quizModal');
+  const backdrop = document.getElementById('quizBackdrop');
+  const closeBtn = document.getElementById('quizClose');
+  const body = document.getElementById('quizBody');
+  const openBtn = document.getElementById('findScentBtn');
+  if (!modal || !openBtn) return;
+
+  let questions = [];
+  const chosen = new Map(); // questionId -> answerId
+  let step = 0;
+
+  function close() {
+    modal.classList.remove('pack-modal--open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  function progressDotsHTML() {
+    return `<div class="quiz-progress">${questions.map((q, i) => `<span class="quiz-progress__dot${i === step ? ' is-active' : ''}${i < step ? ' is-done' : ''}"></span>`).join('')}</div>`;
+  }
+
+  function renderQuestion() {
+    const q = questions[step];
+    body.innerHTML = `
+      ${progressDotsHTML()}
+      <p class="quiz-question-count">Question ${step + 1} / ${questions.length}</p>
+      <h3 class="quiz-question-text">${q.text}</h3>
+      <div class="quiz-answers-grid">
+        ${q.answers.map((a) => `<button type="button" class="quiz-answer-card" data-answer-id="${a.id}">${a.label}</button>`).join('')}
+      </div>
+      ${step > 0 ? '<button type="button" class="quiz-back-btn" id="quizBackBtn">← Question précédente</button>' : ''}`;
+
+    body.querySelectorAll('.quiz-answer-card').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        chosen.set(q.id, btn.dataset.answerId);
+        if (step < questions.length - 1) { step += 1; renderQuestion(); }
+        else submitQuiz();
+      });
+    });
+    const backBtn = document.getElementById('quizBackBtn');
+    if (backBtn) backBtn.addEventListener('click', () => { step -= 1; renderQuestion(); });
+  }
+
+  async function submitQuiz() {
+    body.innerHTML = '<p class="admin-field-help">Analyse de vos réponses...</p>';
+    let data;
+    try {
+      data = await api('/quiz/results', { method: 'POST', body: JSON.stringify({ answerIds: Array.from(chosen.values()) }) });
+    } catch (e) { data = { results: [] }; }
+    renderResults(data.results || []);
+  }
+
+  function wireResultLink() {
+    const link = document.getElementById('quizGoToPacks');
+    if (link) link.addEventListener('click', () => close());
+  }
+
+  function renderResults(results) {
+    if (!results.length) {
+      body.innerHTML = `
+        <div class="quiz-results">
+          <h3>Aucune correspondance trouvée pour le moment</h3>
+          <p class="admin-field-help">Composez directement votre pack — nos parfumeurs seront ravis de vous conseiller.</p>
+          <a href="#collection/parfums" class="btn btn--gold" id="quizGoToPacks">Choisir mon pack</a>
+        </div>`;
+      wireResultLink();
+      return;
+    }
+    body.innerHTML = `
+      <div class="quiz-results">
+        <p class="section__eyebrow">Your Scent Match</p>
+        <h3>Vos parfums recommandés</h3>
+        <div class="quiz-results__list">
+          ${results.map((r, i) => `
+            <div class="quiz-result-card">
+              <span class="quiz-result-card__rank">${i + 1}</span>
+              <div class="quiz-result-card__media">${productMediaHTML(r.product)}</div>
+              <div class="quiz-result-card__body">
+                <h4>${r.product.name}</h4>
+                <p class="quiz-result-card__notes">${r.product.notes || ''}</p>
+                <p class="quiz-result-card__match">${r.matchPercent}% Match</p>
+                ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs.</p>
+        <a href="#collection/${results[0].product.collection ? results[0].product.collection.slug : 'parfums'}" class="btn btn--gold btn--full" id="quizGoToPacks">Choisir mon pack</a>
+      </div>`;
+    wireResultLink();
+  }
+
+  async function open() {
+    body.innerHTML = '<p class="admin-field-help">Chargement...</p>';
+    modal.classList.add('pack-modal--open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    step = 0;
+    chosen.clear();
+    try { questions = await api('/quiz'); } catch (e) { questions = []; }
+    if (!questions.length) {
+      body.innerHTML = '<p class="admin-field-help">Le quiz sera bientôt disponible.</p>';
+      return;
+    }
+    renderQuestion();
+  }
+
+  openBtn.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('pack-modal--open')) close();
+  });
+}
+
 // Boot
 initHomepage();
 initQuickView();
@@ -2197,3 +2376,4 @@ initLoyaltyPage();
 initContactPage();
 initThemeSwitch();
 initAnnouncementBar();
+initFindYourScent();

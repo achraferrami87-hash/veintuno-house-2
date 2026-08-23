@@ -107,7 +107,44 @@ model Characteristic {
   name     String @unique
   position Int    @default(0)
 
-  products ProductCharacteristic[]
+  products        ProductCharacteristic[]
+  quizAnswerLinks QuizAnswerCharacteristic[]
+}
+
+// ===========================
+// "FIND YOUR SCENT" QUIZ — fully dashboard-configurable, no hardcoded
+// recommendation logic. Each answer maps to one or more Characteristics
+// (with a weight); a customer's answers are scored against each product's
+// tagged Characteristics to produce a ranked match list.
+// ===========================
+model QuizQuestion {
+  id       String  @id @default(cuid())
+  text     String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  answers QuizAnswer[]
+}
+
+model QuizAnswer {
+  id       String @id @default(cuid())
+  label    String
+  position Int    @default(0)
+
+  questionId String
+  question   QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  characteristics QuizAnswerCharacteristic[]
+}
+
+model QuizAnswerCharacteristic {
+  answerId         String
+  characteristicId String
+  weight           Int    @default(1)
+  answer           QuizAnswer     @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+
+  @@id([answerId, characteristicId])
 }
 
 model ProductCharacteristic {

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Find Your Scent — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+<style>
+  .quiz-question { border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 18px; background: var(--white); }
+  .quiz-question__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .quiz-question__head h3 { font-family: var(--serif); font-size: 17px; }
+  .quiz-answer { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .quiz-answer__label { flex: 1; font-size: 14px; }
+  .quiz-answer__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .quiz-answer__tags span { font-size: 11px; color: var(--gray); background: var(--cream); padding: 2px 8px; border-radius: 10px; }
+  .weight-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .weight-row input[type="number"] { width: 60px; }
+</style>
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Find Your Scent — Quiz</h1>
+        <p>Configurez les questions, réponses, et les caractéristiques olfactives associées à chaque réponse. Le système calcule ensuite un pourcentage de compatibilité par produit — aucune recommandation n'est câblée en dur.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newQuestionBtn">+ Nouvelle question</button>
+      </div>
+    </div>
+
+    <div id="questionsList"></div>
+    <div class="admin-table__empty" id="emptyState" style="display:none;">Aucune question — créez-en une pour activer le quiz sur le site.</div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let questions = [];
+let characteristics = [];
+
+function answerRowHTML(a) {
+  const tags = a.characteristics.map((c) => `<span>${c.characteristic.name} ×${c.weight}</span>`).join('');
+  return `
+    <div class="quiz-answer" data-sortable-id="${a.id}" data-answer-id="${a.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="quiz-answer__label">
+        ${a.label}
+        <div class="quiz-answer__tags">${tags || '<span>Aucune caractéristique liée</span>'}</div>
+      </div>
+      <button type="button" class="admin-btn admin-btn--small" data-action="edit-answer">Modifier</button>
+      <button type="button" class="admin-btn admin-btn--small is-danger" data-action="delete-answer">Supprimer</button>
+    </div>`;
+}
+
+function questionCardHTML(q) {
+  return `
+    <div class="quiz-question" data-sortable-id="${q.id}" data-question-id="${q.id}" draggable="true">
+      <div class="quiz-question__head">
+        <span class="drag-handle">⠿</span>
+        <h3 style="flex:1;">${q.text}</h3>
+        <button type="button" class="admin-btn admin-btn--small ${q.isActive ? 'admin-btn--gold' : 'admin-btn--ghost'}" data-action="toggle-question">${q.isActive ? 'Active' : 'Inactive'}</button>
+        <button type="button" class="admin-btn admin-btn--small" data-action="rename-question">Renommer</button>
+        <button type="button" class="admin-btn admin-btn--small is-danger" data-action="delete-question">Supprimer</button>
+      </div>
+      <div class="quiz-answers" id="answers-${q.id}">${q.answers.map(answerRowHTML).join('') || '<p class="admin-field-help">Aucune réponse.</p>'}</div>
+      <div class="admin-modal__actions" style="justify-content:flex-start;margin-top:14px;">
+        <button type="button" class="admin-btn admin-btn--ghost" data-action="add-answer">+ Ajouter une réponse</button>
+      </div>
+    </div>`;
+}
+
+async function loadAll() {
+  [questions, characteristics] = await Promise.all([adminApi('/quiz'), adminApi('/characteristics')]);
+  render();
+}
+
+function render() {
+  document.getElementById('questionsList').innerHTML = questions.map(questionCardHTML).join('');
+  document.getElementById('emptyState').style.display = questions.length ? 'none' : 'block';
+  questions.forEach((q) => {
+    makeSortable(document.getElementById(`answers-${q.id}`), async (orderedIds) => {
+      await adminApi(`/quiz/${q.id}/answers/reorder`, { method: 'POST', body: JSON.stringify({ orderedIds }) });
+      await loadAll();
+    });
+  });
+  makeSortable(document.getElementById('questionsList'), async (orderedIds) => {
+    await adminApi('/quiz/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    await loadAll();
+  });
+}
+
+document.getElementById('newQuestionBtn').addEventListener('click', async () => {
+  const text = prompt('Texte de la question (ex. "Quel type de senteur recherchez-vous ?") :');
+  if (!text || !text.trim()) return;
+  await adminApi('/quiz', { method: 'POST', body: JSON.stringify({ text: text.trim() }) });
+  toast('Question créée.');
+  await loadAll();
+});
+
+document.getElementById('questionsList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const questionCard = e.target.closest('.quiz-question');
+  const questionId = questionCard.dataset.questionId;
+  const question = questions.find((q) => q.id === questionId);
+
+  if (btn.dataset.action === 'toggle-question') {
+    await adminApi(`/quiz/${questionId}`, { method: 'PUT', body: JSON.stringify({ isActive: !question.isActive }) });
+    await loadAll();
+  }
+  if (btn.dataset.action === 'rename-question') {
+    const text = prompt('Nouveau texte :', question.text);
+    if (!text || !text.trim()) return;
+    await adminApi(`/quiz/${questionId}`, { method: 'PUT', body: JSON.stringify({ text: text.trim() }) });
+    toast('Question mise à jour.');
+    await loadAll();
+  }
+  if (btn.dataset.action === 'delete-question') {
+    const ok = await confirmDialog(`Supprimer la question "${question.text}" et toutes ses réponses ?`);
+    if (!ok) return;
+    await adminApi(`/quiz/${questionId}`, { method: 'DELETE' });
+    toast('Question supprimée.');
+    await loadAll();
+  }
+  if (btn.dataset.action === 'add-answer') {
+    const label = prompt('Libellé de la réponse (ex. "Fraîche") :');
+    if (!label || !label.trim()) return;
+    const answer = await adminApi(`/quiz/${questionId}/answers`, { method: 'POST', body: JSON.stringify({ label: label.trim(), characteristics: [] }) });
+    toast('Réponse créée — associez ses caractéristiques.');
+    await loadAll();
+    openWeightsModal(questionId, answer.id);
+  }
+  if (btn.dataset.action === 'delete-answer') {
+    const answerRow = e.target.closest('.quiz-answer');
+    const ok = await confirmDialog('Supprimer cette réponse ?');
+    if (!ok) return;
+    await adminApi(`/quiz/answers/${answerRow.dataset.answerId}`, { method: 'DELETE' });
+    toast('Réponse supprimée.');
+    await loadAll();
+  }
+  if (btn.dataset.action === 'edit-answer') {
+    const answerRow = e.target.closest('.quiz-answer');
+    openWeightsModal(questionId, answerRow.dataset.answerId);
+  }
+});
+
+function openWeightsModal(questionId, answerId) {
+  const question = questions.find((q) => q.id === questionId);
+  const answer = question.answers.find((a) => a.id === answerId);
+  if (!characteristics.length) { toast('Créez d\'abord des caractéristiques (page Caractéristiques).', 'error'); return; }
+
+  const linked = new Map(answer.characteristics.map((c) => [c.characteristicId, c.weight]));
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>Caractéristiques — "${answer.label}"</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <p class="admin-field-help">Cochez les caractéristiques associées à cette réponse et ajustez leur poids (importance dans le calcul de compatibilité).</p>
+      <div id="weightsList">
+        ${characteristics.map((c) => `
+          <div class="weight-row">
+            <label class="admin-checkbox"><input type="checkbox" data-char-id="${c.id}" ${linked.has(c.id) ? 'checked' : ''}> ${c.name}</label>
+            <input type="number" min="1" value="${linked.get(c.id) || 1}" data-weight-for="${c.id}" ${linked.has(c.id) ? '' : 'disabled'}>
+          </div>`).join('')}
+      </div>
+      <div class="admin-modal__actions">
+        <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+        <button type="button" class="admin-btn admin-btn--gold" id="saveWeightsBtn">Enregistrer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('[data-char-id]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const weightInput = overlay.querySelector(`[data-weight-for="${cb.dataset.charId}"]`);
+      weightInput.disabled = !cb.checked;
+    });
+  });
+
+  document.getElementById('saveWeightsBtn').addEventListener('click', async () => {
+    const characteristicsPayload = [];
+    overlay.querySelectorAll('[data-char-id]').forEach((cb) => {
+      if (!cb.checked) return;
+      const weightInput = overlay.querySelector(`[data-weight-for="${cb.dataset.charId}"]`);
+      characteristicsPayload.push({ characteristicId: cb.dataset.charId, weight: Number(weightInput.value) || 1 });
+    });
+    try {
+      await adminApi(`/quiz/answers/${answerId}`, { method: 'PUT', body: JSON.stringify({ characteristics: characteristicsPayload }) });
+      toast('Caractéristiques mises à jour.');
+      overlay.remove();
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+(async () => {
+  const admin = await initAdminPage('quiz.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

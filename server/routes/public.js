@@ -268,6 +268,15 @@ router.get('/homepage', async (req, res) => {
           config = { ...config, packs, collectionSlug: col.slug };
         }
       }
+      if (section.type === 'CLIENT_REVIEWS') {
+        const reviews = await prisma.review.findMany({
+          where: { showOnHomepage: true, status: 'APPROVED' },
+          orderBy: { position: 'asc' },
+          include: { product: { select: { name: true, slug: true } } },
+          take: 12,
+        });
+        config = { ...config, reviews };
+      }
 
       return { id: section.id, type: section.type, title: section.title, subtitle: section.subtitle, config };
     })
@@ -282,21 +291,100 @@ router.get('/nav-menu', async (req, res) => {
   res.json(items);
 });
 
+// ---------- "Find Your Scent" quiz ----------
+router.get('/quiz', async (req, res) => {
+  const questions = await prisma.quizQuestion.findMany({
+    where: { isActive: true },
+    orderBy: { position: 'asc' },
+    include: { answers: { orderBy: { position: 'asc' } } },
+  });
+  res.json(questions);
+});
+
+// The customer never sees or influences scoring directly — they submit
+// {questionId, answerId} pairs and every product's match % is computed here,
+// from admin-configured answer→characteristic weights, never hardcoded.
+router.post('/quiz/results', async (req, res) => {
+  const answerIds = Array.isArray(req.body.answerIds) ? req.body.answerIds : [];
+  if (!answerIds.length) return res.json({ results: [] });
+
+  const answerLinks = await prisma.quizAnswerCharacteristic.findMany({
+    where: { answerId: { in: answerIds } },
+  });
+  if (!answerLinks.length) return res.json({ results: [] });
+
+  const weightByCharacteristic = new Map(); // characteristicId -> summed weight from all chosen answers
+  answerLinks.forEach((link) => {
+    weightByCharacteristic.set(link.characteristicId, (weightByCharacteristic.get(link.characteristicId) || 0) + link.weight);
+  });
+  const characteristicIds = Array.from(weightByCharacteristic.keys());
+
+  const products = await prisma.product.findMany({
+    where: { isActive: true, characteristics: { some: { characteristicId: { in: characteristicIds } } } },
+    include: { collection: true, characteristics: { include: { characteristic: true } } },
+  });
+
+  const maxPossibleScore = Array.from(weightByCharacteristic.values()).reduce((s, w) => s + w, 0) || 1;
+
+  const scored = products.map((product) => {
+    const matched = product.characteristics.filter((pc) => weightByCharacteristic.has(pc.characteristicId));
+    const score = matched.reduce((s, pc) => s + weightByCharacteristic.get(pc.characteristicId), 0);
+    return {
+      product: parseImages(product),
+      matchPercent: Math.min(100, Math.round((score / maxPossibleScore) * 100)),
+      matchedCharacteristics: matched.map((pc) => pc.characteristic.name),
+    };
+  });
+
+  scored.sort((a, b) => b.matchPercent - a.matchPercent);
+  res.json({ results: scored.slice(0, 5) });
+});
+
 // ---------- Search ----------
+// Token + tag scoring, not just an exact-name substring match — a query like
+// "fresh summer perfume" surfaces products tagged Fresh/Summer even when
+// those words never appear in the product name itself. No external AI/
+// embeddings service involved: this is a simple, fast weighted keyword score.
 router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').toString().trim().toLowerCase();
-  if (q.length < 2) return res.json({ products: [], collections: [] });
+  const raw = (req.query.q || '').toString().trim().toLowerCase();
+  if (raw.length < 2) return res.json({ products: [], collections: [] });
+  const tokens = raw.split(/\s+/).filter(Boolean);
 
   const [products, collections] = await Promise.all([
-    prisma.product.findMany({ where: { isActive: true } }),
+    prisma.product.findMany({
+      where: { isActive: true },
+      include: { collection: true, characteristics: { include: { characteristic: true } } },
+    }),
     prisma.collection.findMany({ where: { isActive: true } }),
   ]);
 
+  function scoreProduct(p) {
+    const name = p.name.toLowerCase();
+    let genders = [];
+    try { genders = JSON.parse(p.genders || '[]'); } catch (e) { genders = []; }
+    const taggedFields = [
+      p.notes, p.notesTop, p.notesHeart, p.notesBase,
+      p.collection ? p.collection.name : '',
+      ...genders,
+      ...(p.characteristics || []).map((c) => c.characteristic.name),
+    ].filter(Boolean).map((s) => s.toString().toLowerCase());
+
+    let score = 0;
+    if (name.includes(raw)) score += 10; // whole-phrase match on the name ranks highest
+    tokens.forEach((t) => {
+      if (name.includes(t)) score += 5;
+      taggedFields.forEach((f) => { if (f.includes(t)) score += 2; });
+    });
+    return score;
+  }
+
   const matchedProducts = products
-    .filter((p) => p.name.toLowerCase().includes(q) || (p.notes || '').toLowerCase().includes(q))
+    .map((p) => ({ p, score: scoreProduct(p) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
     .slice(0, 8)
-    .map(parseImages);
-  const matchedCollections = collections.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 4);
+    .map((r) => parseImages(r.p));
+  const matchedCollections = collections.filter((c) => c.name.toLowerCase().includes(raw)).slice(0, 4);
 
   res.json({ products: matchedProducts, collections: matchedCollections });
 });
