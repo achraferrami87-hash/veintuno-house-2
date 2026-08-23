@@ -40,10 +40,10 @@ function withGendersArray(product) {
 async function setProductCharacteristics(productId, characteristicIds) {
   if (!Array.isArray(characteristicIds)) return;
   await prisma.productCharacteristic.deleteMany({ where: { productId } });
-  if (characteristicIds.length) {
+  const uniqueIds = Array.from(new Set(characteristicIds));
+  if (uniqueIds.length) {
     await prisma.productCharacteristic.createMany({
-      data: characteristicIds.map((characteristicId) => ({ productId, characteristicId })),
-      skipDuplicates: true,
+      data: uniqueIds.map((characteristicId) => ({ productId, characteristicId })),
     });
   }
 }

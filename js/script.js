@@ -1026,6 +1026,7 @@ async function renderComposePack(container, packId) {
         <div class="product-card__bottle">${productMediaHTML(p)}</div>
         <h3>${p.name}</h3>
         <p class="product-card__notes">${p.notes || ''}</p>
+        <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
         <div class="fragrance-card__qty qty-selector">
           <button type="button" class="qty-minus" data-slug="${p.slug}" aria-label="Retirer">−</button>
           <span class="fragrance-card__qty-value" data-slug="${p.slug}">0</span>
@@ -1041,7 +1042,6 @@ async function renderComposePack(container, packId) {
     <p class="admin-field-help" style="margin-top:-12px;margin-bottom:20px;">Vous pouvez sélectionner plusieurs fois le même parfum.</p>
     <div id="composePackProgress"></div>
     <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
-    <div class="compose-success" id="composePackSuccess" hidden></div>
     <div class="compose-sticky-bar" id="composePackBar">
       <div class="pack-modal__recap" id="composePackRecap"><span class="pack-modal__recap-empty">Aucun parfum sélectionné</span></div>
       <button type="button" class="btn btn--gold" id="composePackCta" disabled>Ajouter au panier</button>
@@ -1051,8 +1051,6 @@ async function renderComposePack(container, packId) {
   const grid = document.getElementById('composePackGrid');
   const recap = document.getElementById('composePackRecap');
   const cta = document.getElementById('composePackCta');
-  const successPane = document.getElementById('composePackSuccess');
-  const bar = document.getElementById('composePackBar');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
 
   function updateUI() {
@@ -1122,12 +1120,8 @@ async function renderComposePack(container, packId) {
       for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); }
     });
     Cart.addPack(pack.id, pack.name, pack.price, slugs, names);
-    grid.hidden = true;
-    bar.hidden = true;
-    successPane.hidden = false;
-    successPane.innerHTML = composeSuccessHTML(pack.name, names);
-    wireComposeSuccessActions(successPane);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    lastComposeAddedSummary = { name: pack.name, itemNames: names };
+    location.hash = '#compose/added';
   });
 
   updateUI();
@@ -1149,15 +1143,15 @@ async function renderComposeFree(container) {
     <div id="composeFreeProgress"></div>
     <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
       ${config.eligibleProducts.map((p) => `
-        <button type="button" class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}">
+        <div class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}" tabindex="0" role="button">
           <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <div class="product-card__bottle">${productMediaHTML(p)}</div>
           <h3>${p.name}</h3>
           <p class="product-card__notes">${p.notes || ''}</p>
           <p class="product-card__price">${p.freePackPrice} MAD</p>
-        </button>`).join('')}
+          <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
+        </div>`).join('')}
     </div>
-    <div class="compose-success" id="composeFreeSuccess" hidden></div>
     <div class="compose-sticky-bar" id="composeFreeBar">
       <div class="pack-modal__recap" id="composeFreeRecap"><span class="pack-modal__recap-empty">Aucun produit sélectionné</span></div>
       <button type="button" class="btn btn--gold" id="composeFreeCta" disabled>Ajouter au panier</button>
@@ -1167,8 +1161,6 @@ async function renderComposeFree(container) {
   const grid = document.getElementById('composeFreeGrid');
   const recap = document.getElementById('composeFreeRecap');
   const cta = document.getElementById('composeFreeCta');
-  const successPane = document.getElementById('composeFreeSuccess');
-  const bar = document.getElementById('composeFreeBar');
   const priceHint = document.getElementById('composeFreePriceHint');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
 
@@ -1222,40 +1214,53 @@ async function renderComposeFree(container) {
     updateUI();
   }
 
-  cards.forEach((card) => card.addEventListener('click', () => toggleCard(card.dataset.slug)));
+  cards.forEach((card) => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.js-quick-view')) return;
+      toggleCard(card.dataset.slug);
+    });
+    card.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target === card) {
+        e.preventDefault();
+        toggleCard(card.dataset.slug);
+      }
+    });
+  });
 
   cta.addEventListener('click', () => {
     if (cta.disabled) return;
     const price = selected.reduce((s, i) => s + i.price, 0);
     Cart.addFreePack(config.name, price, selected.map((s) => s.slug), selected.map((s) => s.name));
-    grid.hidden = true;
-    bar.hidden = true;
-    successPane.hidden = false;
-    successPane.innerHTML = composeSuccessHTML(config.name, selected.map((s) => s.name));
-    wireComposeSuccessActions(successPane);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    lastComposeAddedSummary = { name: config.name, itemNames: selected.map((s) => s.name) };
+    location.hash = '#compose/added';
   });
 
   updateUI();
 }
 
-function composeSuccessHTML(name, itemNames) {
-  return `
-    <div class="pack-modal__success-icon">
-      <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <h3>${name} ajouté au panier</h3>
-    <p>Vous pouvez continuer votre sélection ou passer votre commande.</p>
-    <ul class="pack-modal__success-list">${itemNames.map((n) => `<li>${n}</li>`).join('')}</ul>
-    <div class="compose-success__actions">
-      <button type="button" class="btn btn--gold js-compose-view-cart">Voir mon panier</button>
-      <a href="#compose" class="btn btn--outline">Composer un autre pack</a>
-    </div>`;
-}
+// Set right before `location.hash = '#compose/added'` by the composer CTA
+// handlers — a plain transient variable is enough since the dedicated view is
+// only ever reached immediately after adding a pack, never by direct link.
+let lastComposeAddedSummary = null;
 
-function wireComposeSuccessActions(scope) {
-  const btn = scope.querySelector('.js-compose-view-cart');
-  if (btn) btn.addEventListener('click', () => Cart.open('bag'));
+function renderComposeAdded(container) {
+  const summary = lastComposeAddedSummary;
+  const name = summary ? summary.name : 'Votre pack';
+  const itemNames = summary ? summary.itemNames : [];
+  container.innerHTML = `
+    <div class="compose-success compose-success--page">
+      <div class="pack-modal__success-icon">
+        <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2 class="section__title">${name} ajouté au panier</h2>
+      ${itemNames.length ? `<ul class="pack-modal__success-list">${itemNames.map((n) => `<li>${n}</li>`).join('')}</ul>` : ''}
+      <div class="compose-success__actions">
+        <button type="button" class="btn btn--gold" id="composeAddedViewCart">Voir mon panier</button>
+        <a href="#compose" class="btn btn--outline">Composer un autre pack</a>
+      </div>
+    </div>`;
+  const viewCartBtn = document.getElementById('composeAddedViewCart');
+  if (viewCartBtn) viewCartBtn.addEventListener('click', () => Cart.open('bag'));
 }
 
 // ===========================
@@ -1323,10 +1328,30 @@ async function renderReceipt(container, orderNumber, phone) {
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <button type="button" class="btn btn--gold" id="receiptPrintBtn">Imprimer / Télécharger (PDF)</button>
       <button type="button" class="btn btn--outline" id="receiptPngBtn">Télécharger le reçu (PNG)</button>
-    </div>`;
+    </div>
+    ${receipt.status === 'DELIVERED' ? receiptReviewInviteHTML(receipt) : ''}`;
 
   document.getElementById('receiptPrintBtn').addEventListener('click', () => window.print());
   document.getElementById('receiptPngBtn').addEventListener('click', () => downloadReceiptAsPNG(receipt));
+}
+
+// Invite the customer to leave a review right on their receipt once the
+// order is delivered, instead of only surfacing the (already-gated) review
+// form later on a product page — reuses the same eligibility rule server-side.
+function receiptReviewInviteHTML(receipt) {
+  const slugs = new Set();
+  receipt.items.forEach((it) => {
+    if (it.productSlug) slugs.add(it.productSlug);
+    (it.componentSlugs || []).forEach((s) => slugs.add(s));
+  });
+  if (!slugs.size) return '';
+  const firstSlug = Array.from(slugs)[0];
+  return `
+    <div class="receipt-review-invite">
+      <h3>Votre avis compte pour nous</h3>
+      <p>Votre commande a été livrée — dites-nous ce que vous en avez pensé.</p>
+      <a href="#product/${firstSlug}" class="btn btn--gold">Laisser un avis</a>
+    </div>`;
 }
 
 // Draws the receipt onto an offscreen canvas and downloads it as a PNG —
@@ -2188,6 +2213,10 @@ function initRevealAnimations() {
       viewCompose.hidden = false;
       window.scrollTo(0, 0);
       await renderComposePack(composeContainer, packId);
+    } else if (hash === 'compose/added') {
+      viewCompose.hidden = false;
+      window.scrollTo(0, 0);
+      renderComposeAdded(composeContainer);
     } else if (hash === 'receipt' || hash.startsWith('receipt/')) {
       const parts = hash.split('/');
       const orderNumber = parts[1] ? decodeURIComponent(parts[1]) : null;
@@ -2335,13 +2364,19 @@ function initFindYourScent() {
                 <p class="quiz-result-card__notes">${r.product.notes || ''}</p>
                 <p class="quiz-result-card__match">${r.matchPercent}% Match</p>
                 ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
+                <div class="quiz-result-card__actions">
+                  <a href="#product/${r.product.slug}" class="btn btn--outline btn--small">Découvrir ce parfum</a>
+                  <a href="#collection/${r.product.collection ? r.product.collection.slug : 'parfums'}" class="btn btn--gold btn--small js-quiz-add-to-cart">Ajouter au panier</a>
+                </div>
               </div>
             </div>`).join('')}
         </div>
-        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs.</p>
-        <a href="#collection/${results[0].product.collection ? results[0].product.collection.slug : 'parfums'}" class="btn btn--gold btn--full" id="quizGoToPacks">Choisir mon pack</a>
+        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs — le bouton "Ajouter au panier" vous amène directement au choix de pack incluant ce parfum.</p>
       </div>`;
     wireResultLink();
+    body.querySelectorAll('.js-quiz-add-to-cart, .quiz-result-card__actions a').forEach((link) => {
+      link.addEventListener('click', () => close());
+    });
   }
 
   async function open() {

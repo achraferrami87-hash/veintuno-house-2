@@ -1,7 +1,16 @@
 const express = require('express');
 const prisma = require('../db');
+const { seedDefaultQuizContent } = require('../utils/quizSeed');
 
 const router = express.Router();
+
+// One-click, idempotent starter content: default questions/answers/weights
+// (only if none exist yet) plus auto-tagging of existing Parfums products
+// with inferred characteristics (always safe to re-run, additive only).
+router.post('/seed-defaults', async (req, res) => {
+  const result = await seedDefaultQuizContent();
+  res.json(result);
+});
 
 const answerInclude = { characteristics: { include: { characteristic: true } } };
 
@@ -12,7 +21,7 @@ async function setAnswerCharacteristics(answerId, characteristics) {
   const rows = characteristics
     .filter((c) => c && c.characteristicId)
     .map((c) => ({ answerId, characteristicId: c.characteristicId, weight: Math.max(1, Number(c.weight) || 1) }));
-  if (rows.length) await prisma.quizAnswerCharacteristic.createMany({ data: rows, skipDuplicates: true });
+  if (rows.length) await prisma.quizAnswerCharacteristic.createMany({ data: rows });
 }
 
 // ---------- Questions ----------

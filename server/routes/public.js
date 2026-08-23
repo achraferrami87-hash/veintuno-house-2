@@ -428,7 +428,7 @@ router.get('/orders/:orderNumber/receipt', async (req, res) => {
   const order = await prisma.order.findUnique({
     where: { orderNumber: req.params.orderNumber },
     include: {
-      items: { include: { components: true } },
+      items: { include: { components: { include: { product: { select: { slug: true } } } }, product: { select: { slug: true } } } },
       promoCode: true,
     },
   });
@@ -449,7 +449,9 @@ router.get('/orders/:orderNumber/receipt', async (req, res) => {
     city: order.city,
     items: order.items.map((it) => ({
       kind: it.kind, name: it.name, unitPrice: it.unitPrice, quantity: it.quantity,
-      detail: it.detail, components: it.components.map((c) => c.name),
+      detail: it.detail, productSlug: it.product ? it.product.slug : null,
+      components: it.components.map((c) => c.name),
+      componentSlugs: it.components.map((c) => c.product ? c.product.slug : null).filter(Boolean),
     })),
     subtotal: order.subtotal,
     discountAmount: order.discountAmount,
