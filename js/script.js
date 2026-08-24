@@ -68,6 +68,8 @@ if (navToggle && nav) {
     if (e.target.closest('a')) {
       nav.classList.remove('nav--open');
       navToggle.classList.remove('nav-toggle--active');
+      const dropdown = document.getElementById('collectionsDropdown');
+      if (dropdown) dropdown.classList.remove('is-open');
     }
   });
 }
@@ -2366,12 +2368,12 @@ function initFindYourScent() {
                 ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
                 <div class="quiz-result-card__actions">
                   <a href="#product/${r.product.slug}" class="btn btn--outline btn--small">Découvrir ce parfum</a>
-                  <a href="#collection/${r.product.collection ? r.product.collection.slug : 'parfums'}" class="btn btn--gold btn--small js-quiz-add-to-cart">Ajouter au panier</a>
+                  <a href="#collection/${r.product.collection ? r.product.collection.slug : 'parfums'}" class="btn btn--gold btn--small js-quiz-add-to-cart">Choisir mon pack</a>
                 </div>
               </div>
             </div>`).join('')}
         </div>
-        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs — le bouton "Ajouter au panier" vous amène directement au choix de pack incluant ce parfum.</p>
+        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs — le bouton "Choisir mon pack" vous amène directement au choix de pack incluant ce parfum.</p>
       </div>`;
     wireResultLink();
     body.querySelectorAll('.js-quiz-add-to-cart, .quiz-result-card__actions a').forEach((link) => {

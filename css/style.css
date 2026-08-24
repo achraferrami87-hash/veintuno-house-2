@@ -532,6 +532,9 @@ em { font-style: italic; color: var(--gold); }
   margin-bottom: 10px;
 }
 .pack-modal__progress-text span { color: var(--black); font-weight: 500; }
+[data-theme="sombre"] .pack-modal__progress-text span { color: var(--gold); }
+[data-theme="sombre"] .pack-modal__progress-bar { background: rgba(255,255,255,0.12); }
+[data-theme="sombre"] .pack-modal__progress { border-bottom-color: rgba(255,255,255,0.08); }
 .pack-modal__progress-bar {
   height: 3px;
   background: rgba(0,0,0,0.08);
@@ -1218,6 +1221,8 @@ em { font-style: italic; color: var(--gold); }
 .product-detail__availability { font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 20px; }
 .product-detail__availability.is-available { color: #2f7a45; }
 .product-detail__availability.is-unavailable { color: #a13333; }
+[data-theme="sombre"] .product-detail__availability.is-available { color: #5fc27a; }
+[data-theme="sombre"] .product-detail__availability.is-unavailable { color: #e08585; }
 .product-detail__description { color: #444; margin-bottom: 24px; line-height: 1.8; }
 .product-detail__notes { border-top: 1px solid rgba(0,0,0,0.08); padding-top: 20px; margin-bottom: 30px; }
 .product-detail__notes p { font-size: 14px; color: #333; padding: 6px 0; }
@@ -1348,6 +1353,7 @@ em { font-style: italic; color: var(--gold); }
   font-size: 12px; font-style: italic; color: var(--gray);
   border-top: 1px solid rgba(0,0,0,0.08); padding-top: 16px; margin-bottom: 24px;
 }
+[data-theme="sombre"] .product-detail__disclaimer { color: #a39c8c; border-top-color: rgba(255,255,255,0.1); }
 
 /* ===========================
    Cart — order review step
@@ -1447,8 +1453,9 @@ a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba
   .nav a, .nav-cta-link { padding: 14px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); width: 100%; }
   .nav-dropdown { width: 100%; }
   .nav-dropdown__trigger { padding: 14px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); width: 100%; justify-content: space-between; }
-  .nav-dropdown__panel { position: static; opacity: 1; visibility: visible; padding-top: 0; display: none; }
+  .nav-dropdown__panel { position: static; left: auto; transform: none; opacity: 1; visibility: visible; padding-top: 0; display: none; }
   .nav-dropdown.is-open .nav-dropdown__panel { display: flex; }
+  .nav a, .nav-dropdown__trigger, .nav-megamenu__item { touch-action: manipulation; }
   .nav-megamenu {
     grid-template-columns: 1fr; min-width: 0; max-width: none; width: 100%;
     box-shadow: none; border: none; transform: none; padding: 0;
@@ -1653,9 +1660,17 @@ a { transition: color 0.2s ease; }
 [data-theme="sombre"] .btn--outline:hover { background: #f3efe6; color: #111; }
 [data-theme="sombre"] .product-card, [data-theme="sombre"] .review-item, [data-theme="sombre"] .chooser-card,
 [data-theme="sombre"] .fragrance-card, [data-theme="sombre"] .loyalty-card, [data-theme="sombre"] .contact-card,
-[data-theme="sombre"] .pack-card, [data-theme="sombre"] .bundle-card {
+[data-theme="sombre"] .pack-card, [data-theme="sombre"] .bundle-card, [data-theme="sombre"] .quiz-result-card {
   background: #1b1917; color: #f3efe6;
 }
+/* A selected fragrance card must stay visually distinct from an unselected
+   one once dark mode repaints all cards to the same near-black background —
+   otherwise the customer can no longer see which perfumes they picked. */
+[data-theme="sombre"] .fragrance-card.is-selected {
+  background: #241f14; border-color: var(--gold);
+  box-shadow: 0 14px 30px rgba(212,175,55,0.22);
+}
+[data-theme="sombre"] .quiz-result-card__notes, [data-theme="sombre"] .quiz-result-card__why { color: #b8b0a0; }
 [data-theme="sombre"] .pack-card__count { color: #b8b0a0; }
 [data-theme="sombre"] .pack-card ul { border-top-color: rgba(255,255,255,0.1); }
 [data-theme="sombre"] .pack-card ul li { color: #cfcac0; }
@@ -1682,6 +1697,13 @@ a { transition: color 0.2s ease; }
 [data-theme="sombre"] .order-history-item { border-color: rgba(255,255,255,0.1); }
 [data-theme="sombre"] .loyalty-progress__bar { background: rgba(255,255,255,0.1); }
 [data-theme="sombre"] .admin-field-help { color: #a39c8c; }
+[data-theme="sombre"] .pack-modal__close { color: #f3efe6; border-color: rgba(255,255,255,0.15); }
+[data-theme="sombre"] .pack-modal__close:hover { background: #f3efe6; color: #111; border-color: #f3efe6; }
+[data-theme="sombre"] .cart-drawer__back { color: #f3efe6; }
+[data-theme="sombre"] .review-customer { color: #cfc9ba; }
+[data-theme="sombre"] .review-customer p:first-child { color: #f3efe6; }
+[data-theme="sombre"] .loyalty-how strong { color: #f3efe6; }
+[data-theme="sombre"] .loyalty-result__points span { color: #f3efe6; }
 [data-theme="sombre"] .collections-page, [data-theme="sombre"] .packs, [data-theme="sombre"] .testimonials,
 [data-theme="sombre"] .collection--femme { background: #111111; }
 [data-theme="sombre"] .search-overlay__bar,
