@@ -549,5 +549,6 @@ model SiteSettings {
   perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
   defaultTheme      String   @default("clair") // clair | sombre — the visitor's own choice (localStorage) still overrides this
   announcementText  String   @default("Livraison offerte partout au Maroc")
+  metaPixelId       String?  // Meta (Facebook) Pixel ID — the storefront only loads the Pixel script when this is set
   updatedAt         DateTime @updatedAt
 }

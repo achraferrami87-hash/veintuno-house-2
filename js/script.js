@@ -275,6 +275,7 @@ const Cart = (() => {
       detail: `${componentSlugs.length} produits — ${summarizeNames(componentNames)}`,
     });
     clearPromo(); persist(); renderAll();
+    trackPixelEvent('AddToCart', { content_name: packName, content_type: 'product_group', value: Number(packPrice), currency: 'MAD' });
   }
 
   function addFreePack(freePackName, unitPrice, componentSlugs, componentNames) {
@@ -284,6 +285,7 @@ const Cart = (() => {
       detail: summarizeNames(componentNames),
     });
     clearPromo(); persist(); renderAll();
+    trackPixelEvent('AddToCart', { content_name: freePackName, content_type: 'product_group', value: Number(unitPrice), currency: 'MAD' });
   }
 
   function addBundle(bundleId, bundleName, bundlePrice, detail) {
@@ -293,6 +295,7 @@ const Cart = (() => {
     });
     clearPromo(); persist(); renderAll();
     pulseBadge();
+    trackPixelEvent('AddToCart', { content_ids: [bundleId], content_name: bundleName, content_type: 'product_group', value: Number(bundlePrice), currency: 'MAD' });
   }
 
   function addProduct(product) {
@@ -308,6 +311,10 @@ const Cart = (() => {
     }
     clearPromo(); persist(); renderAll();
     pulseBadge();
+    trackPixelEvent('AddToCart', {
+      content_ids: [product.slug], content_name: product.name, content_type: 'product',
+      value: product.onSale ? product.displayPrice : product.price, currency: 'MAD',
+    });
   }
 
   function removeItem(uid) {
@@ -434,6 +441,10 @@ const Cart = (() => {
     // is recognized server-side and never creates a second order.
     clientOrderId = newClientOrderId();
     showStep('checkout');
+    trackPixelEvent('InitiateCheckout', {
+      value: total(), currency: 'MAD', num_items: itemCount(),
+      content_ids: items.map((i) => i.productSlug || i.packId || i.bundleId).filter(Boolean),
+    });
   });
 
   checkoutForm.addEventListener('submit', (e) => {
@@ -543,6 +554,11 @@ const Cart = (() => {
       totalLi.style.fontWeight = '600';
       totalLi.textContent = `Total — ${result.total} MAD`;
       successListEl.appendChild(totalLi);
+
+      trackPixelEvent('Purchase', {
+        value: result.total, currency: 'MAD', num_items: itemCount(),
+        content_ids: items.map((i) => i.productSlug || i.packId || i.bundleId).filter(Boolean),
+      });
 
       // Order is locked in server-side — now safe to wipe the local cart so
       // a page refresh or repeat visit can never resubmit the same order.
@@ -1508,6 +1524,10 @@ function initQuickView() {
   async function open(slug) {
     let product;
     try { product = await getProductBySlug(slug); } catch (e) { return; }
+    trackPixelEvent('ViewContent', {
+      content_ids: [product.slug], content_name: product.name, content_type: 'product',
+      value: product.onSale ? product.displayPrice : product.price, currency: 'MAD',
+    });
     nameEl.textContent = product.name;
     body.innerHTML = productDetailBodyHTML(product, true);
     wireProductDetailActions(body, product);
@@ -1849,6 +1869,36 @@ async function initAnnouncementBar() {
   if (settings && settings.announcementText) bar.textContent = settings.announcementText;
 }
 
+// ===========================
+// META PIXEL — only loaded when an admin configures a Pixel ID
+// (SiteSettings.metaPixelId); silently disabled otherwise.
+// ===========================
+async function initMetaPixel() {
+  const settings = await getSiteSettings();
+  const pixelId = settings && settings.metaPixelId;
+  if (!pixelId) return;
+  if (window.fbq) return; // already loaded (e.g. hot route re-entry)
+
+  /* eslint-disable */
+  (function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = true; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = true; t.src = v;
+    s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+  })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+  /* eslint-enable */
+
+  window.fbq('init', pixelId);
+  window.fbq('track', 'PageView');
+}
+
+// Fire-and-forget: no-op if the Pixel was never loaded (no Pixel ID configured).
+function trackPixelEvent(eventName, params) {
+  if (typeof window.fbq === 'function') window.fbq('track', eventName, params || {});
+}
+
 function whatsappHref(numberOrLink) {
   if (!numberOrLink) return null;
   if (numberOrLink.startsWith('http')) return numberOrLink;
@@ -2156,6 +2206,10 @@ function initRevealAnimations() {
       mount.innerHTML = '<p style="padding:60px;text-align:center;">Produit introuvable.</p>';
       return;
     }
+    trackPixelEvent('ViewContent', {
+      content_ids: [product.slug], content_name: product.name, content_type: 'product',
+      value: product.onSale ? product.displayPrice : product.price, currency: 'MAD',
+    });
     mount.innerHTML = productDetailBodyHTML(product);
     wireProductDetailActions(mount, product);
     startVisitorCounter(mount.querySelector('.js-visitor-counter'));
@@ -2413,4 +2467,5 @@ initLoyaltyPage();
 initContactPage();
 initThemeSwitch();
 initAnnouncementBar();
+initMetaPixel();
 initFindYourScent();

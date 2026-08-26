@@ -56,6 +56,20 @@
         </div>
       </form>
     </div>
+
+    <div class="admin-card" style="margin-bottom:24px;max-width:640px;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;">Marketing</h2>
+      <form class="admin-form" id="marketingForm">
+        <div class="admin-field">
+          <label>Meta Pixel ID (Facebook/Instagram Ads)</label>
+          <input name="metaPixelId" placeholder="ex. 1234567890123456">
+          <p class="admin-field-help">Trouvable dans Meta Events Manager → Sources de données → votre Pixel. Une fois renseigné, le site charge automatiquement le Pixel et suit PageView, ViewContent, AddToCart, InitiateCheckout et Purchase. Laissez vide pour désactiver.</p>
+        </div>
+        <div class="admin-modal__actions" style="justify-content:flex-start;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+        </div>
+      </form>
+    </div>
   </main>
 </div>
 
@@ -70,6 +84,7 @@ async function load() {
   form.perfumeDisclaimer.value = settings.perfumeDisclaimer || '';
   form.instagramQrImage.value = settings.instagramQrImage || '';
   form.defaultTheme.value = settings.defaultTheme || 'clair';
+  document.getElementById('marketingForm').metaPixelId.value = settings.metaPixelId || '';
   if (settings.instagramQrImage) {
     document.getElementById('qrPreview').innerHTML = `<img src="${settings.instagramQrImage}" style="width:120px;height:120px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
   }
@@ -101,6 +116,15 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
   try {
     await adminApi('/settings', { method: 'PUT', body: JSON.stringify(payload) });
     toast('Réglages enregistrés.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('marketingForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    await adminApi('/settings', { method: 'PUT', body: JSON.stringify({ metaPixelId: fd.get('metaPixelId') }) });
+    toast('Meta Pixel enregistré.');
   } catch (err) { toast(err.message, 'error'); }
 });
 
