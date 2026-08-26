@@ -10,7 +10,7 @@
   --bg: #f3f1ea;
   --danger: #a13333;
   --success: #2f7a45;
-  --serif: 'Bodoni Moda', 'Playfair Display', serif;
+  --serif: 'Fraunces', 'Playfair Display', serif;
   --sans: 'Manrope', 'Poppins', sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
