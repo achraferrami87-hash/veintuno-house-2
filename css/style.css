@@ -18,6 +18,22 @@
 
 html { scroll-behavior: smooth; }
 
+/* Keyboard-navigation focus ring — mouse/touch users never see this
+   (:focus-visible), keyboard users always get a clear gold outline. */
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+[data-theme="sombre"] :focus-visible { outline-color: var(--gold-light); }
+
+.skip-link {
+  position: absolute; top: -50px; left: 12px; z-index: 2000;
+  background: var(--black); color: var(--white);
+  padding: 12px 22px; font-size: 13px; letter-spacing: 0.5px;
+  transition: top 0.2s ease;
+}
+.skip-link:focus { top: 12px; }
+
 body {
   font-family: var(--sans);
   color: var(--black);
@@ -25,7 +41,22 @@ body {
   font-weight: 300;
   line-height: 1.6;
   overflow-x: hidden;
+  position: relative;
 }
+
+/* A near-invisible grain layer so large flat surfaces (hero, cream sections)
+   read as paper/fabric rather than a perfectly flat digital fill. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  pointer-events: none;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@media (prefers-reduced-motion: reduce), print { body::before { display: none; } }
 
 .container {
   width: 100%;
@@ -294,7 +325,7 @@ em { font-style: italic; color: var(--gold); }
   position: relative;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-.pack-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.08); }
+.pack-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(24,18,8,0.10); }
 .pack-card--featured { background: var(--black); color: var(--white); border-color: var(--black); }
 .pack-card--featured ul li { color: #cfcac0; }
 .pack-card__badge {
@@ -352,7 +383,7 @@ em { font-style: italic; color: var(--gold); }
   border-radius: 6px;
   transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
-.product-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(0,0,0,0.09); border-color: rgba(212,175,55,0.25); }
+.product-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(24,18,8,0.11); border-color: rgba(212,175,55,0.25); }
 .product-card__bottle { display: block; overflow: hidden; }
 .product-card__bottle img { width: 100%; height: 100%; object-fit: contain; display: block; transition: transform 0.5s ease; }
 .product-card:hover .product-card__bottle img { transform: scale(1.06); }
@@ -417,7 +448,7 @@ em { font-style: italic; color: var(--gold); }
   background: var(--cream); padding: 30px 26px; border: 1px solid rgba(0,0,0,0.06); border-radius: 6px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-.client-review-card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,0.08); }
+.client-review-card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(24,18,8,0.10); }
 .client-review-card__photo { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; margin-bottom: 14px; }
 .client-review-card__stars { color: var(--gold); letter-spacing: 3px; margin-bottom: 14px; font-size: 14px; }
 .client-review-card__text { font-size: 15px; color: #333; line-height: 1.7; margin-bottom: 16px; }
@@ -577,7 +608,7 @@ em { font-style: italic; color: var(--gold); }
   color: inherit;
   transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
 }
-.fragrance-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(0,0,0,0.08); }
+.fragrance-card:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(24,18,8,0.10); }
 .fragrance-card .product-card__bottle { width: 80px; margin: 16px auto 18px; }
 .fragrance-card h3 { font-family: var(--serif); font-size: 19px; margin-bottom: 4px; }
 .fragrance-card .product-card__notes { margin-bottom: 0; }
@@ -1253,7 +1284,7 @@ em { font-style: italic; color: var(--gold); }
   text-align: center; cursor: pointer; font-family: inherit; transition: all 0.25s ease;
   display: flex; flex-direction: column; gap: 8px;
 }
-.chooser-card:hover { border-color: var(--gold); transform: translateY(-4px); box-shadow: 0 16px 34px rgba(0,0,0,0.1); }
+.chooser-card:hover { border-color: var(--gold); transform: translateY(-4px); box-shadow: 0 16px 34px rgba(24,18,8,0.12); }
 .chooser-card--gold { background: var(--black); color: var(--white); }
 .chooser-card__title { font-family: var(--serif); font-size: 22px; font-weight: 600; }
 .chooser-card__sub { font-size: 12px; color: var(--gray); }
@@ -1393,7 +1424,7 @@ em { font-style: italic; color: var(--gold); }
   display: flex; flex-direction: column; align-items: center; gap: 14px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba(0,0,0,0.1); }
+a.contact-card:hover { transform: translateY(-6px); box-shadow: 0 20px 45px rgba(24,18,8,0.12); }
 .contact-card__icon { width: 52px; height: 52px; color: var(--gold); }
 .contact-card__icon svg { width: 100%; height: 100%; }
 .contact-card h3 { font-family: var(--serif); font-size: 22px; font-weight: 600; }
@@ -1556,7 +1587,7 @@ input.is-invalid { border-color: #a13333 !important; }
   border: 1px solid rgba(0,0,0,0.08); padding: 14px 16px; margin-bottom: 10px; font-size: 13px;
   transition: box-shadow 0.2s ease;
 }
-.order-history-item:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.06); }
+.order-history-item:hover { box-shadow: 0 8px 22px rgba(24,18,8,0.08); }
 .order-history-item__head { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 6px; }
 .order-history-item__meta { color: var(--gray); font-size: 12px; }
 
@@ -1604,7 +1635,7 @@ input.is-invalid { border-color: #a13333 !important; }
   background: var(--cream); padding: 22px 24px; border-radius: 4px; border: 1px solid transparent;
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
-.review-item:hover { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(0,0,0,0.08); border-color: rgba(201,162,39,0.25); }
+.review-item:hover { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(24,18,8,0.10); border-color: rgba(201,162,39,0.25); }
 .review-item .review-stars { font-size: 15px; letter-spacing: 2px; }
 .review-item .review-customer { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray); margin: 8px 0 10px; }
 .review-item .review-customer::before { content: none; }
