@@ -10,7 +10,12 @@
 <body>
 <div class="admin-shell" id="adminShell">
   <main class="admin-main">
-    <div class="admin-header"><div><h1>Commandes</h1><p>Suivez et mettez à jour le statut de chaque commande.</p></div></div>
+    <div class="admin-header">
+      <div><h1>Commandes</h1><p>Suivez et mettez à jour le statut de chaque commande.</p></div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="exportExcelBtn">Exporter en Excel</button>
+      </div>
+    </div>
 
     <div class="admin-tabs" id="statusTabs">
       <div class="admin-tab is-active" data-status="">Toutes</div>
@@ -58,7 +63,7 @@ function rowHTML(o) {
     </tr>`;
 }
 
-async function loadOrders() {
+function currentFilterParams() {
   const params = new URLSearchParams();
   if (currentStatus) params.set('status', currentStatus);
   const search = document.getElementById('searchInput').value.trim();
@@ -67,11 +72,20 @@ async function loadOrders() {
   if (search) params.set('search', search);
   if (dateFrom) params.set('dateFrom', dateFrom);
   if (dateTo) params.set('dateTo', dateTo);
-  const qs = params.toString();
+  return params;
+}
+
+async function loadOrders() {
+  const qs = currentFilterParams().toString();
   const orders = await adminApi(`/orders${qs ? `?${qs}` : ''}`);
   document.getElementById('ordersBody').innerHTML = orders.map(rowHTML).join('');
   document.getElementById('emptyState').style.display = orders.length ? 'none' : 'block';
 }
+
+document.getElementById('exportExcelBtn').addEventListener('click', () => {
+  const qs = currentFilterParams().toString();
+  window.location.href = `/api/admin/orders/export${qs ? `?${qs}` : ''}`;
+});
 
 document.getElementById('statusTabs').addEventListener('click', (e) => {
   const tab = e.target.closest('.admin-tab');

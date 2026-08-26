@@ -1,36 +1,107 @@
 const express = require('express');
+const ExcelJS = require('exceljs');
 const prisma = require('../db');
 
 const router = express.Router();
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
-router.get('/', async (req, res) => {
+function buildOrdersWhere(query) {
   const where = {};
-  if (req.query.status) where.status = req.query.status;
-  if (req.query.dateFrom || req.query.dateTo) {
+  if (query.status) where.status = query.status;
+  if (query.dateFrom || query.dateTo) {
     where.createdAt = {};
-    if (req.query.dateFrom) where.createdAt.gte = new Date(req.query.dateFrom);
-    if (req.query.dateTo) {
-      const to = new Date(req.query.dateTo);
+    if (query.dateFrom) where.createdAt.gte = new Date(query.dateFrom);
+    if (query.dateTo) {
+      const to = new Date(query.dateTo);
       to.setHours(23, 59, 59, 999);
       where.createdAt.lte = to;
     }
   }
-  if (req.query.search) {
-    const q = req.query.search.toString();
+  if (query.search) {
+    const q = query.search.toString();
     where.OR = [
       { orderNumber: { contains: q } },
       { fullName: { contains: q } },
       { phone: { contains: q } },
     ];
   }
+  return where;
+}
+
+router.get('/', async (req, res) => {
   const orders = await prisma.order.findMany({
-    where,
+    where: buildOrdersWhere(req.query),
     orderBy: { createdAt: 'desc' },
     include: { items: true, promoCode: true },
   });
   res.json(orders);
+});
+
+// Row fill color per status — mirrors the dashboard's badge colors
+// (gray = en attente / préparation en cours, green = livrée, red = annulée).
+const STATUS_FILL = {
+  PENDING: 'FFE0E0E0',
+  CONFIRMED: 'FFC6EFCE',
+  PREPARING: 'FFE0E0E0',
+  SHIPPED: 'FFE0E0E0',
+  DELIVERED: 'FFC6EFCE',
+  CANCELLED: 'FFFFC7CE',
+};
+
+router.get('/export', async (req, res) => {
+  const orders = await prisma.order.findMany({
+    where: buildOrdersWhere(req.query),
+    orderBy: { createdAt: 'desc' },
+    include: { items: true, promoCode: true },
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Commandes');
+  sheet.columns = [
+    { header: 'N° commande', key: 'orderNumber', width: 20 },
+    { header: 'Client', key: 'fullName', width: 24 },
+    { header: 'Téléphone', key: 'phone', width: 16 },
+    { header: 'Ville', key: 'city', width: 16 },
+    { header: 'Adresse', key: 'address', width: 30 },
+    { header: 'Articles', key: 'itemsCount', width: 10 },
+    { header: 'Sous-total', key: 'subtotal', width: 12 },
+    { header: 'Réduction', key: 'discountAmount', width: 12 },
+    { header: 'Livraison', key: 'deliveryFee', width: 12 },
+    { header: 'Total (MAD)', key: 'total', width: 14 },
+    { header: 'Statut', key: 'status', width: 14 },
+    { header: 'Date', key: 'createdAt', width: 18 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  orders.forEach((o) => {
+    const row = sheet.addRow({
+      orderNumber: o.orderNumber,
+      fullName: o.fullName,
+      phone: o.phone,
+      city: o.city,
+      address: o.address,
+      itemsCount: o.items.length,
+      subtotal: o.subtotal,
+      discountAmount: o.discountAmount,
+      deliveryFee: o.deliveryFee,
+      total: o.total,
+      status: o.status,
+      createdAt: new Date(o.createdAt).toLocaleString('fr-FR'),
+    });
+    const fill = STATUS_FILL[o.status];
+    if (fill) {
+      row.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      });
+    }
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const filename = `commandes-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(Buffer.from(buffer));
 });
 
 router.get('/:id', async (req, res) => {
