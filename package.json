@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --env-file=.env server/index.js",
     "build": "prisma generate",
+    "postinstall": "prisma generate",
     "start": "prisma migrate deploy && node server/index.js",
     "seed": "node prisma/seed.js",
     "seed:dev": "node --env-file=.env prisma/seed.js"
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.8.0",
     "cookie-session": "^2.1.1",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
