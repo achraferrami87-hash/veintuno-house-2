@@ -180,7 +180,6 @@ const Cart = (() => {
 
   const stepBag = document.getElementById('cartStepBag');
   const stepCheckout = document.getElementById('cartStepCheckout');
-  const stepReview = document.getElementById('cartStepReview');
   const stepSuccess = document.getElementById('cartStepSuccess');
 
   const itemsEl = document.getElementById('cartItems');
@@ -192,14 +191,8 @@ const Cart = (() => {
   const checkoutSubtotalEl = document.getElementById('checkoutSubtotal');
   const checkoutForm = document.getElementById('checkoutForm');
   const checkoutErrorEl = document.getElementById('checkoutError');
+  const checkoutSubmitBtn = document.getElementById('checkoutReviewBtn');
   if (checkoutForm.phone) attachPhoneValidation(checkoutForm.phone);
-
-  const reviewItemsEl = document.getElementById('reviewItems');
-  const reviewCustomerEl = document.getElementById('reviewCustomer');
-  const reviewTotalEl = document.getElementById('reviewTotal');
-  const reviewErrorEl = document.getElementById('reviewError');
-  const reviewFinalizeBtn = document.getElementById('reviewFinalizeBtn');
-  const reviewBackBtn = document.getElementById('reviewBackBtn');
 
   const successNameEl = document.getElementById('successCustomerName');
   const successOrderNumberEl = document.getElementById('successOrderNumber');
@@ -378,7 +371,6 @@ const Cart = (() => {
   function showStep(step) {
     stepBag.hidden = step !== 'bag';
     stepCheckout.hidden = step !== 'checkout';
-    stepReview.hidden = step !== 'review';
     stepSuccess.hidden = step !== 'success';
   }
   function open(step) {
@@ -397,11 +389,8 @@ const Cart = (() => {
   if (backdrop) backdrop.addEventListener('click', close);
   document.getElementById('cartClose').addEventListener('click', close);
   document.getElementById('cartCloseFromCheckout').addEventListener('click', close);
-  document.getElementById('cartCloseFromReview').addEventListener('click', close);
   document.getElementById('cartCloseFromSuccess').addEventListener('click', close);
   document.getElementById('cartBackToBag').addEventListener('click', () => showStep('bag'));
-  document.getElementById('cartBackToCheckout').addEventListener('click', () => showStep('checkout'));
-  reviewBackBtn.addEventListener('click', () => showStep('checkout'));
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && drawer.classList.contains('cart-drawer--open')) close();
   });
@@ -447,7 +436,7 @@ const Cart = (() => {
     });
   });
 
-  checkoutForm.addEventListener('submit', (e) => {
+  checkoutForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!checkoutForm.reportValidity()) return;
     if (!isValidPhone(checkoutForm.phone.value)) {
@@ -455,6 +444,14 @@ const Cart = (() => {
       checkoutErrorEl.hidden = false;
       return;
     }
+    // Belt-and-suspenders against double submission: a synchronous flag
+    // (immune to a second click landing before disabled= takes visual
+    // effect) plus the disabled attribute plus a server-side idempotency key.
+    if (isSubmittingOrder) return;
+    isSubmittingOrder = true;
+    checkoutSubmitBtn.disabled = true;
+    checkoutSubmitBtn.textContent = 'Traitement...';
+    checkoutErrorEl.hidden = true;
 
     const formData = new FormData(checkoutForm);
     pendingCustomer = {
@@ -463,69 +460,6 @@ const Cart = (() => {
       city: formData.get('city').toString().trim(),
       phone: formData.get('phone').toString().trim(),
     };
-
-    reviewErrorEl.hidden = true;
-    reviewTotalEl.textContent = `${total()} MAD`;
-    reviewCustomerEl.innerHTML = `
-      <p><strong>${pendingCustomer.fullName}</strong></p>
-      <p>${pendingCustomer.address}, ${pendingCustomer.city}</p>
-      <p>${pendingCustomer.phone}</p>`;
-    reviewItemsEl.innerHTML = items.map((item) => `
-      <div class="cart-item">
-        <div class="cart-item__info">
-          <h4>${item.name}</h4>
-          <p>${item.detail}</p>
-          <div class="cart-item__meta"><span class="cart-item__price">${item.quantity > 1 ? `${item.quantity} × ${item.unitPrice} MAD` : `${item.unitPrice} MAD`}</span></div>
-        </div>
-      </div>`).join('');
-
-    showStep('review');
-  });
-
-  const orderHistoryBtn = document.getElementById('orderHistoryBtn');
-  const orderHistoryResult = document.getElementById('orderHistoryResult');
-  if (orderHistoryBtn) {
-    orderHistoryBtn.addEventListener('click', async () => {
-      const fullName = checkoutForm.fullName.value.trim();
-      const phone = checkoutForm.phone.value.trim();
-      if (!fullName || !phone) {
-        orderHistoryResult.innerHTML = '<p class="checkout-form__error">Renseignez votre nom et téléphone ci-dessus d\'abord.</p>';
-        return;
-      }
-      if (!isValidPhone(phone)) {
-        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${PHONE_ERROR_MSG}</p>`;
-        return;
-      }
-      orderHistoryBtn.disabled = true;
-      orderHistoryBtn.textContent = 'Recherche...';
-      try {
-        const data = await api('/orders/history', { method: 'POST', body: JSON.stringify({ fullName, phone }) });
-        orderHistoryResult.innerHTML = data.orders.length
-          ? data.orders.map((o) => `
-            <div class="order-history-item">
-              <div class="order-history-item__head"><span>${o.orderNumber}</span><span>${o.total} MAD</span></div>
-              <div class="order-history-item__meta">${new Date(o.createdAt).toLocaleDateString('fr-FR')} · ${o.status} · ${o.items.length} article(s)</div>
-            </div>`).join('')
-          : '<p class="admin-field-help">Aucune commande trouvée avec ces informations.</p>';
-      } catch (err) {
-        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${err.message}</p>`;
-      } finally {
-        orderHistoryBtn.disabled = false;
-        orderHistoryBtn.textContent = 'Voir mes commandes précédentes';
-      }
-    });
-  }
-
-  reviewFinalizeBtn.addEventListener('click', async () => {
-    // Belt-and-suspenders against double submission: a synchronous flag
-    // (immune to a second click landing before disabled= takes visual
-    // effect) plus the disabled attribute plus a server-side idempotency key.
-    if (isSubmittingOrder || !pendingCustomer) return;
-    isSubmittingOrder = true;
-    reviewFinalizeBtn.disabled = true;
-    reviewBackBtn.disabled = true;
-    reviewFinalizeBtn.textContent = 'Traitement...';
-    reviewErrorEl.hidden = true;
 
     try {
       const result = await api('/orders', {
@@ -568,15 +502,48 @@ const Cart = (() => {
       clientOrderId = null;
       showStep('success');
     } catch (err) {
-      reviewErrorEl.textContent = err.message;
-      reviewErrorEl.hidden = false;
+      checkoutErrorEl.textContent = err.message;
+      checkoutErrorEl.hidden = false;
     } finally {
       isSubmittingOrder = false;
-      reviewFinalizeBtn.disabled = false;
-      reviewBackBtn.disabled = false;
-      reviewFinalizeBtn.textContent = 'Finaliser la commande';
+      checkoutSubmitBtn.disabled = false;
+      checkoutSubmitBtn.textContent = 'Finaliser ma commande';
     }
   });
+
+  const orderHistoryBtn = document.getElementById('orderHistoryBtn');
+  const orderHistoryResult = document.getElementById('orderHistoryResult');
+  if (orderHistoryBtn) {
+    orderHistoryBtn.addEventListener('click', async () => {
+      const fullName = checkoutForm.fullName.value.trim();
+      const phone = checkoutForm.phone.value.trim();
+      if (!fullName || !phone) {
+        orderHistoryResult.innerHTML = '<p class="checkout-form__error">Renseignez votre nom et téléphone ci-dessus d\'abord.</p>';
+        return;
+      }
+      if (!isValidPhone(phone)) {
+        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${PHONE_ERROR_MSG}</p>`;
+        return;
+      }
+      orderHistoryBtn.disabled = true;
+      orderHistoryBtn.textContent = 'Recherche...';
+      try {
+        const data = await api('/orders/history', { method: 'POST', body: JSON.stringify({ fullName, phone }) });
+        orderHistoryResult.innerHTML = data.orders.length
+          ? data.orders.map((o) => `
+            <div class="order-history-item">
+              <div class="order-history-item__head"><span>${o.orderNumber}</span><span>${o.total} MAD</span></div>
+              <div class="order-history-item__meta">${new Date(o.createdAt).toLocaleDateString('fr-FR')} · ${o.status} · ${o.items.length} article(s)</div>
+            </div>`).join('')
+          : '<p class="admin-field-help">Aucune commande trouvée avec ces informations.</p>';
+      } catch (err) {
+        orderHistoryResult.innerHTML = `<p class="checkout-form__error">${err.message}</p>`;
+      } finally {
+        orderHistoryBtn.disabled = false;
+        orderHistoryBtn.textContent = 'Voir mes commandes précédentes';
+      }
+    });
+  }
 
   document.getElementById('cartContinueShopping').addEventListener('click', close);
   const receiptLinkEl = document.getElementById('successReceiptLink');

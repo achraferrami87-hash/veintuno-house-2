@@ -309,7 +309,7 @@ try {
           <span>Total à payer à la livraison</span>
           <span id="checkoutSubtotal">0 MAD</span>
         </div>
-        <button type="submit" class="btn btn--gold btn--full" id="checkoutReviewBtn">Vérifier ma commande</button>
+        <button type="submit" class="btn btn--gold btn--full" id="checkoutReviewBtn">Finaliser ma commande</button>
       </form>
       <details class="order-history-toggle">
         <summary>Historique de vos commandes</summary>
@@ -319,28 +319,6 @@ try {
           <div id="orderHistoryResult"></div>
         </div>
       </details>
-    </div>
-
-    <!-- Step: Review (final explicit confirmation, prevents accidental double-order) -->
-    <div class="cart-step" id="cartStepReview" hidden>
-      <div class="cart-drawer__header">
-        <button type="button" class="cart-drawer__back" id="cartBackToCheckout" aria-label="Retour">←</button>
-        <h2>Confirmer la commande</h2>
-        <button type="button" class="pack-modal__close" id="cartCloseFromReview" aria-label="Fermer">
-          <svg viewBox="0 0 24 24"><path d="M4 4 L20 20 M20 4 L4 20" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-        </button>
-      </div>
-      <div class="cart-drawer__items" id="reviewItems"></div>
-      <div class="cart-drawer__footer">
-        <div id="reviewCustomer" class="review-customer"></div>
-        <div id="reviewError" class="checkout-form__error" hidden></div>
-        <div class="cart-drawer__subtotal">
-          <span>Total à payer à la livraison</span>
-          <span id="reviewTotal">0 MAD</span>
-        </div>
-        <button type="button" class="btn btn--gold btn--full" id="reviewFinalizeBtn">Finaliser la commande</button>
-        <button type="button" class="btn btn--outline btn--full" id="reviewBackBtn" style="margin-top:10px;">Retour</button>
-      </div>
     </div>
 
     <!-- Step: Confirmation -->
