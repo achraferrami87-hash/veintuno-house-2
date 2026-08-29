@@ -2136,3 +2136,44 @@ a { transition: color 0.2s ease; }
 =========================== */
 .fragrance-card .product-card__bottle { width: 100%; max-width: 130px; height: 150px; margin: 10px auto 16px; }
 .fragrance-card .product-card__bottle svg { height: 100%; }
+
+/* ===========================
+   Pack tier cards — extend the same dark/gold editorial language used on
+   the redesigned product cards to the "choose your pack" pricing cards
+   (shown on every collection page, above the product grid, and on the
+   homepage), so the whole page reads as one consistent design instead of
+   a dark product grid sitting under a plain white pricing table.
+=========================== */
+.pack-card {
+  background: var(--black);
+  color: var(--white);
+  border-color: rgba(255,255,255,0.1);
+  border-radius: 16px;
+}
+.pack-card:hover { box-shadow: 0 22px 46px rgba(12,12,12,0.22); }
+.pack-card__count { color: var(--gold-light); }
+.pack-card ul { border-top-color: rgba(255,255,255,0.12); }
+.pack-card ul li { color: #cfcac0; }
+.pack-card .btn--outline { border-color: rgba(255,255,255,0.35); color: var(--white); }
+.pack-card .btn--outline:hover { background: var(--white); color: var(--black); }
+
+/* Now that every tier is dark, the featured/"most chosen" one is set
+   apart with a gold ring instead of being the only dark card. */
+.pack-card--featured {
+  border: 1px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(212,175,55,0.25), 0 22px 50px rgba(212,175,55,0.14);
+}
+
+.pack-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+}
+.pack-card__badge::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--black);
+  flex-shrink: 0;
+}
