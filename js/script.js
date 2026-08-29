@@ -167,6 +167,80 @@ document.addEventListener('click', (e) => {
 });
 
 // ===========================
+// Pack composer — in-progress selections, kept at module scope (not inside
+// renderComposePack/renderComposeFree) so navigating away and back to the
+// same pack — or opening a product's quick view, or filtering/searching —
+// never resets what the customer already picked. Cleared once the pack is
+// actually added to the cart. Lives only for the current page session
+// (not persisted to localStorage) since it's a draft, not a cart item.
+// ===========================
+const composeDraftState = {
+  packs: new Map(), // packId -> Map(slug -> qty)
+  free: new Map(), // configId -> [{slug, name, price, collection}]
+};
+
+function stripAccents(str) {
+  return str.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Shared by both the fixed-size pack composer and the free/custom pack
+// composer — instant client-side search (by name or notes) plus the same
+// Homme/Femme/Unisexe/Tous gender chips used on collection pages. Filtering
+// only toggles visibility; it never touches selection state.
+function initFragranceToolbar({ searchInput, genderFilter, cards, emptyMsg }) {
+  let query = '';
+  let gender = '';
+
+  function apply() {
+    const q = stripAccents(query.trim().toLowerCase());
+    let visibleCount = 0;
+    cards.forEach((card) => {
+      const name = stripAccents((card.dataset.name || '').toLowerCase());
+      const notesEl = card.querySelector('.product-card__notes');
+      const notes = stripAccents((notesEl ? notesEl.textContent : '').toLowerCase());
+      const matchesSearch = !q || name.includes(q) || notes.includes(q);
+      const genders = (card.dataset.genders || '').split(',').filter(Boolean);
+      const matchesGender = !gender || genders.includes(gender);
+      const visible = matchesSearch && matchesGender;
+      card.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+    if (emptyMsg) emptyMsg.hidden = visibleCount > 0;
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', () => { query = searchInput.value; apply(); });
+  }
+  if (genderFilter) {
+    genderFilter.addEventListener('click', (e) => {
+      const chip = e.target.closest('.gender-filter__chip');
+      if (!chip) return;
+      genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      gender = chip.dataset.gender;
+      apply();
+    });
+  }
+}
+
+function fragranceToolbarHTML(idPrefix) {
+  return `
+    <div class="compose-toolbar">
+      <div class="compose-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M21 21 L16.6 16.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <input type="text" id="${idPrefix}Search" placeholder="Rechercher un parfum...">
+      </div>
+      <div class="gender-filter" id="${idPrefix}GenderFilter">
+        <div class="gender-filter__chip is-active" data-gender="">Tous</div>
+        <div class="gender-filter__chip" data-gender="homme">Homme</div>
+        <div class="gender-filter__chip" data-gender="femme">Femme</div>
+        <div class="gender-filter__chip" data-gender="unisexe">Unisexe</div>
+      </div>
+    </div>
+    <p class="admin-field-help compose-empty-msg" id="${idPrefix}EmptyMsg" hidden>Aucun parfum ne correspond à votre recherche.</p>`;
+}
+
+// ===========================
 // PACKS cache (by id) — shared between homepage, collection pages, and the pack modal
 // ===========================
 const packsCache = new Map();
@@ -1024,12 +1098,15 @@ async function renderComposePack(container, packId) {
 
   // Quantities per slug — a customer can pick the same perfume several times
   // (e.g. Atlas Noir ×2, Minuit Cuir ×1) as long as the total equals pack.size.
-  const quantities = new Map(); // slug -> count
+  // Stored at module scope (composeDraftState) keyed by packId so leaving this
+  // pack (quick view, gender filter, going back and returning) never resets it.
+  if (!composeDraftState.packs.has(packId)) composeDraftState.packs.set(packId, new Map());
+  const quantities = composeDraftState.packs.get(packId);
   const totalSelected = () => Array.from(quantities.values()).reduce((s, n) => s + n, 0);
 
   function cardsGridHTML() {
     return pack.eligibleProducts.map((p) => `
-      <div class="fragrance-card fragrance-card--stepper" data-slug="${p.slug}" data-name="${p.name}">
+      <div class="fragrance-card fragrance-card--stepper" data-slug="${p.slug}" data-name="${p.name}" data-genders="${(p.genders || []).join(',')}">
         ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
         <div class="product-card__bottle">${productMediaHTML(p)}</div>
         <h3>${p.name}</h3>
@@ -1049,6 +1126,7 @@ async function renderComposePack(container, packId) {
     <h2 class="section__title">${pack.name}</h2>
     <p class="admin-field-help" style="margin-top:-12px;margin-bottom:20px;">Vous pouvez sélectionner plusieurs fois le même parfum.</p>
     <div id="composePackProgress"></div>
+    ${fragranceToolbarHTML('composePack')}
     <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
     <div class="compose-sticky-bar" id="composePackBar">
       <div class="pack-modal__recap" id="composePackRecap"><span class="pack-modal__recap-empty">Aucun parfum sélectionné</span></div>
@@ -1060,6 +1138,13 @@ async function renderComposePack(container, packId) {
   const recap = document.getElementById('composePackRecap');
   const cta = document.getElementById('composePackCta');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
+
+  initFragranceToolbar({
+    searchInput: document.getElementById('composePackSearch'),
+    genderFilter: document.getElementById('composePackGenderFilter'),
+    emptyMsg: document.getElementById('composePackEmptyMsg'),
+    cards,
+  });
 
   function updateUI() {
     const total = totalSelected();
@@ -1128,6 +1213,7 @@ async function renderComposePack(container, packId) {
       for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); }
     });
     Cart.addPack(pack.id, pack.name, pack.price, slugs, names);
+    composeDraftState.packs.delete(packId);
     lastComposeAddedSummary = { name: pack.name, itemNames: names };
     location.hash = '#compose/added';
   });
@@ -1141,7 +1227,12 @@ async function renderComposeFree(container) {
   if (!config) { container.innerHTML = '<p class="admin-field-help">Le Free Pack n\'est pas disponible pour le moment.</p>'; return; }
   cacheProducts(config.eligibleProducts);
 
-  const selected = []; // {slug, name, price, collection}
+  // Only one Free Pack config exists site-wide, so a fixed key is enough —
+  // stored at module scope (composeDraftState) so leaving this page (quick
+  // view, gender filter, going back and returning) never resets it.
+  const draftKey = 'default';
+  if (!composeDraftState.free.has(draftKey)) composeDraftState.free.set(draftKey, []);
+  const selected = composeDraftState.free.get(draftKey); // {slug, name, price, collection}
 
   container.innerHTML = `
     <a href="#compose" class="collection-detail__back">← Changer de formule</a>
@@ -1149,9 +1240,10 @@ async function renderComposeFree(container) {
     <h2 class="section__title">Choisissez vos produits</h2>
     <p class="admin-field-help" id="composeFreePriceHint" style="margin-bottom:14px;">Chaque parfum coûte ${config.perfumePrice} MAD, chaque gel douche coûte ${config.gelDouchePrice} MAD — le prix s'additionne pour chaque produit choisi.</p>
     <div id="composeFreeProgress"></div>
+    ${fragranceToolbarHTML('composeFree')}
     <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
       ${config.eligibleProducts.map((p) => `
-        <div class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}" tabindex="0" role="button">
+        <div class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}" data-genders="${(p.genders || []).join(',')}" tabindex="0" role="button">
           <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <div class="product-card__bottle">${productMediaHTML(p)}</div>
           <h3>${p.name}</h3>
@@ -1171,6 +1263,19 @@ async function renderComposeFree(container) {
   const cta = document.getElementById('composeFreeCta');
   const priceHint = document.getElementById('composeFreePriceHint');
   const cards = Array.from(grid.querySelectorAll('.fragrance-card'));
+
+  // Re-hydrate the DOM's is-selected state from any restored selections —
+  // the cards themselves are freshly rendered HTML, so the class needs to
+  // be re-applied even though the underlying `selected` array survived.
+  const selectedSlugs = new Set(selected.map((s) => s.slug));
+  cards.forEach((card) => card.classList.toggle('is-selected', selectedSlugs.has(card.dataset.slug)));
+
+  initFragranceToolbar({
+    searchInput: document.getElementById('composeFreeSearch'),
+    genderFilter: document.getElementById('composeFreeGenderFilter'),
+    emptyMsg: document.getElementById('composeFreeEmptyMsg'),
+    cards,
+  });
 
   function updateUI() {
     progressEl.innerHTML = composeProgressHTML(selected.length, config.minItems, 'produit(s)');
@@ -1239,6 +1344,7 @@ async function renderComposeFree(container) {
     if (cta.disabled) return;
     const price = selected.reduce((s, i) => s + i.price, 0);
     Cart.addFreePack(config.name, price, selected.map((s) => s.slug), selected.map((s) => s.name));
+    composeDraftState.free.delete(draftKey);
     lastComposeAddedSummary = { name: config.name, itemNames: selected.map((s) => s.name) };
     location.hash = '#compose/added';
   });

@@ -2177,3 +2177,78 @@ a { transition: color 0.2s ease; }
   background: var(--black);
   flex-shrink: 0;
 }
+
+/* ===========================
+   Pack composer — search + gender filter toolbar
+=========================== */
+.compose-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.compose-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 220px;
+  padding: 12px 16px;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--gray);
+  transition: border-color 0.2s ease;
+}
+.compose-search:focus-within { border-color: var(--gold); }
+.compose-search svg { width: 18px; height: 18px; flex-shrink: 0; }
+.compose-search input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--black);
+}
+.compose-search input:focus { outline: none; }
+.compose-search input::placeholder { color: rgba(0,0,0,0.35); }
+.compose-toolbar .gender-filter { margin-bottom: 0; flex-wrap: wrap; }
+.compose-empty-msg { margin: -10px 0 20px; }
+
+[data-theme="sombre"] .compose-search { background: #211e1a; border-color: rgba(255,255,255,0.15); }
+[data-theme="sombre"] .compose-search input { color: #f3efe6; }
+[data-theme="sombre"] .compose-search input::placeholder { color: #766f60; }
+[data-theme="sombre"] .compose-search svg { color: #b8b0a0; }
+
+@media (max-width: 640px) {
+  .compose-toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
+}
+
+/* ===========================
+   Dark mode — fix invisible "selected products" recap chips
+   .pack-modal__chip had a hardcoded light (cream) background with no
+   text color of its own, so in dark mode it inherited the page's light
+   text color meant for the dark background around it — cream text on a
+   cream chip, effectively invisible. This is what a customer composing a
+   pack sees listing what they've already picked, so it's the most visible
+   possible instance of the "unreadable dark mode text" class of bug.
+=========================== */
+[data-theme="sombre"] .pack-modal__chip {
+  background: #241f1a;
+  border-color: rgba(255,255,255,0.14);
+  color: #f3efe6;
+}
+[data-theme="sombre"] .pack-modal__chip button { color: #b8b0a0; }
+[data-theme="sombre"] .pack-modal__chip button:hover { color: #f3efe6; }
+
+/* The illustrated placeholder bottle (dark stroke line-art, meant for a
+   light backdrop) becomes nearly invisible once the surrounding fragrance
+   card turns dark — give the image slot its own light chip so it reads
+   correctly regardless of the card's theme, matching the redesigned
+   product-grid cards' same fallback treatment. */
+[data-theme="sombre"] .fragrance-card .product-card__bottle {
+  background: var(--cream);
+  border-radius: 8px;
+}
+[data-theme="sombre"] .fragrance-card__check { background: #241f1a; border-color: rgba(255,255,255,0.2); }
