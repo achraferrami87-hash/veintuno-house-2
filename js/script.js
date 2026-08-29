@@ -1105,19 +1105,26 @@ async function renderComposePack(container, packId) {
   const totalSelected = () => Array.from(quantities.values()).reduce((s, n) => s + n, 0);
 
   function cardsGridHTML() {
-    return pack.eligibleProducts.map((p) => `
+    return pack.eligibleProducts.map((p) => {
+      const hasPhoto = Array.isArray(p.images) && !!p.images[0];
+      return `
       <div class="fragrance-card fragrance-card--stepper" data-slug="${p.slug}" data-name="${p.name}" data-genders="${(p.genders || []).join(',')}">
-        ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
-        <div class="product-card__bottle">${productMediaHTML(p)}</div>
-        <h3>${p.name}</h3>
-        <p class="product-card__notes">${p.notes || ''}</p>
-        <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
-        <div class="fragrance-card__qty qty-selector">
-          <button type="button" class="qty-minus" data-slug="${p.slug}" aria-label="Retirer">−</button>
-          <span class="fragrance-card__qty-value" data-slug="${p.slug}">0</span>
-          <button type="button" class="qty-plus" data-slug="${p.slug}" aria-label="Ajouter">+</button>
+        <div class="fragrance-card__media${hasPhoto ? ' fragrance-card__media--photo' : ''}">
+          ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
+          <div class="product-card__bottle">${productMediaHTML(p)}</div>
         </div>
-      </div>`).join('');
+        <div class="fragrance-card__footer">
+          <h3>${cardTitleHTML(p.name)}</h3>
+          <p class="product-card__notes">${p.notes || ''}</p>
+          <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
+          <div class="fragrance-card__qty qty-selector">
+            <button type="button" class="qty-minus" data-slug="${p.slug}" aria-label="Retirer">−</button>
+            <span class="fragrance-card__qty-value" data-slug="${p.slug}">0</span>
+            <button type="button" class="qty-plus" data-slug="${p.slug}" aria-label="Ajouter">+</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   container.innerHTML = `
@@ -1242,15 +1249,22 @@ async function renderComposeFree(container) {
     <div id="composeFreeProgress"></div>
     ${fragranceToolbarHTML('composeFree')}
     <div class="chooser-grid compose-fragrance-grid" id="composeFreeGrid">
-      ${config.eligibleProducts.map((p) => `
+      ${config.eligibleProducts.map((p) => {
+        const hasPhoto = Array.isArray(p.images) && !!p.images[0];
+        return `
         <div class="fragrance-card" data-slug="${p.slug}" data-name="${p.name}" data-price="${p.freePackPrice}" data-collection="${p.collectionId}" data-genders="${(p.genders || []).join(',')}" tabindex="0" role="button">
-          <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <div class="product-card__bottle">${productMediaHTML(p)}</div>
-          <h3>${p.name}</h3>
-          <p class="product-card__notes">${p.notes || ''}</p>
-          <p class="product-card__price">${p.freePackPrice} MAD</p>
-          <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
-        </div>`).join('')}
+          <div class="fragrance-card__media${hasPhoto ? ' fragrance-card__media--photo' : ''}">
+            <span class="fragrance-card__check"><svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <div class="product-card__bottle">${productMediaHTML(p)}</div>
+          </div>
+          <div class="fragrance-card__footer">
+            <h3>${cardTitleHTML(p.name)}</h3>
+            <p class="product-card__notes">${p.notes || ''}</p>
+            <p class="product-card__price">${p.freePackPrice} MAD</p>
+            <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
     <div class="compose-sticky-bar" id="composeFreeBar">
       <div class="pack-modal__recap" id="composeFreeRecap"><span class="pack-modal__recap-empty">Aucun produit sélectionné</span></div>
