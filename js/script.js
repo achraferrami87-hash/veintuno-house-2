@@ -124,20 +124,36 @@ function priceHTML(p, variant) {
     </p>`;
 }
 
+// Editorial touch on the grid card title — italicize the first word only
+// (e.g. "<em>Ombre</em> Nomad"), purely typographic, no content change.
+function cardTitleHTML(name) {
+  const idx = name.indexOf(' ');
+  if (idx === -1) return `<em>${name}</em>`;
+  return `<em>${name.slice(0, idx)}</em>${name.slice(idx)}`;
+}
+
 function productCardHTML(p) {
   const tag = p.isBestSeller ? 'Best Seller' : p.isLimitedEdition ? 'Édition limitée' : p.isNew ? 'Nouveauté' : null;
   const packOnly = p.collection && p.collection.packOnly;
+  const hasPhoto = Array.isArray(p.images) && !!p.images[0];
   return `
     <article class="product-card reveal" data-href="#product/${p.slug}">
-      ${p.onSale ? `<span class="flash-badge">${p.flashSaleLabel || 'Flash Sale'}</span>` : tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
-      <a href="#product/${p.slug}" class="product-card__bottle">${productMediaHTML(p)}</a>
-      ${!packOnly ? `<button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>` : ''}
-      <h3><a href="#product/${p.slug}">${p.name}</a></h3>
-      <p class="product-card__notes">${p.notes || ''}</p>
-      ${priceHTML(p, 'card')}
-      ${packOnly
-        ? `<a href="#collection/${p.collection.slug}" class="btn btn--outline product-card__cta">En pack uniquement</a>`
-        : `<button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier</button>`}
+      <div class="product-card__media${hasPhoto ? ' product-card__media--photo' : ''}">
+        ${p.onSale ? `<span class="flash-badge">${p.flashSaleLabel || 'Flash Sale'}</span>` : tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
+        ${p.volume ? `<span class="product-card__volume">${p.volume}</span>` : ''}
+        <a href="#product/${p.slug}" class="product-card__bottle">${productMediaHTML(p)}</a>
+        ${!packOnly ? `<button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>` : ''}
+      </div>
+      <div class="product-card__footer">
+        <div class="product-card__heading">
+          <h3><a href="#product/${p.slug}">${cardTitleHTML(p.name)}</a></h3>
+          ${priceHTML(p, 'card')}
+        </div>
+        <p class="product-card__notes">${p.notes || ''}</p>
+        ${packOnly
+          ? `<a href="#collection/${p.collection.slug}" class="btn btn--outline product-card__cta">En pack uniquement →</a>`
+          : `<button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier →</button>`}
+      </div>
     </article>`;
 }
 
@@ -758,14 +774,21 @@ function testimonialsSectionHTML(section) {
 
 function bundleCardHTML(b) {
   const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  const hasPhoto = !!b.image;
   return `
     <article class="product-card reveal">
-      <span class="product-card__tag product-card__tag--gold">Bundle</span>
-      <div class="product-card__bottle">${b.image ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
-      <h3>${b.name}</h3>
-      <p class="product-card__notes">${content}</p>
-      <p class="product-card__price">${b.price} MAD</p>
-      <button type="button" class="btn btn--outline product-card__cta js-add-bundle" data-id="${b.id}" data-name="${b.name}" data-price="${b.price}" data-detail="${content.replace(/"/g, '&quot;')}">Ajouter au panier</button>
+      <div class="product-card__media${hasPhoto ? ' product-card__media--photo' : ''}">
+        <span class="product-card__tag product-card__tag--gold">Bundle</span>
+        <div class="product-card__bottle">${hasPhoto ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
+      </div>
+      <div class="product-card__footer">
+        <div class="product-card__heading">
+          <h3>${cardTitleHTML(b.name)}</h3>
+          <p class="product-card__price">${b.price} MAD</p>
+        </div>
+        <p class="product-card__notes">${content}</p>
+        <button type="button" class="btn btn--outline product-card__cta js-add-bundle" data-id="${b.id}" data-name="${b.name}" data-price="${b.price}" data-detail="${content.replace(/"/g, '&quot;')}">Ajouter au panier →</button>
+      </div>
     </article>`;
 }
 
