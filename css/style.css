@@ -1871,13 +1871,28 @@ a { transition: color 0.2s ease; }
    Product grid — 2 columns all the way down to small phones (360–430px),
    denser spacing, larger product imagery so bottles never look tiny.
 =========================== */
+
+/* Product image frame — a real uploaded photo was rendering tiny because
+   the box only had a fixed WIDTH; height:100% on the <img> was a no-op
+   against an auto-height parent, so the photo just displayed at whatever
+   size its own aspect ratio happened to produce. Giving the frame a real
+   fixed height makes object-fit:contain scale ANY image (illustration or
+   uploaded photo) up to fill the same generous, consistent size. Applies
+   at every width, not just mobile. */
+.products__grid .product-card__bottle {
+  width: 160px;
+  height: 200px;
+  margin: 14px auto 20px;
+}
+.products__grid .product-card__bottle svg { height: 100%; }
+
 @media (max-width: 480px) {
   .products__grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
   }
   .product-card { padding: 18px 14px 22px; border-radius: 10px; }
-  .products__grid .product-card__bottle { width: 100%; max-width: 130px; margin: 6px auto 16px; }
+  .products__grid .product-card__bottle { width: 100%; max-width: 130px; height: 150px; margin: 6px auto 16px; }
   .product-card h3 { font-size: 16px; }
   .product-card__notes { font-size: 10.5px; margin-bottom: 8px; }
   .product-card__price { font-size: 14px; }
