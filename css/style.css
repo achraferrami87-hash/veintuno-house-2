@@ -2066,3 +2066,60 @@ a { transition: color 0.2s ease; }
   .products__grid .product-card__cta { padding: 10px 14px; font-size: 10px; }
   .container { padding: 0 20px; }
 }
+
+/* ===========================
+   Header — premium polish pass: breathing room, a soft gold-tinted
+   divider instead of a flat gray line, gold hover on nav text, a proper
+   pill treatment for the primary "Composer mon pack" CTA, and larger
+   circular hit/hover targets on the icon buttons (also a real mobile
+   touch-target improvement, not just decorative on desktop).
+=========================== */
+.header__top { padding-top: 20px; padding-bottom: 16px; }
+.header__bottom {
+  border-top: none;
+  position: relative;
+  padding-top: 14px;
+  padding-bottom: 16px;
+}
+.header__bottom::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.4) 50%, transparent);
+}
+
+.nav { gap: 38px; }
+.nav a, .nav-dropdown__trigger { letter-spacing: 1.4px; transition: color 0.25s ease; }
+.nav a:hover, .nav-dropdown__trigger:hover { color: var(--gold); }
+
+.nav-cta-link { border-radius: 999px; padding: 9px 20px; }
+.nav-cta-link::after { display: none; }
+/* ".nav a" (class + type) outranks a bare ".nav-cta-link" (class only), so
+   its border:none/color:black were silently winning over the intended
+   gold pill — this link is an <a> inside .nav, so it always matched that
+   broader rule too. Re-declared here with matching-or-higher specificity
+   so the border and gold color actually apply. */
+.nav a.nav-cta-link {
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.nav a.nav-cta-link:hover { background: var(--gold); color: var(--black); }
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.icon-btn:hover { background: rgba(212,175,55,0.12); color: var(--gold); }
+.cart-toggle__badge { top: 2px; right: 2px; }
+
+[data-theme="sombre"] .icon-btn:hover { background: rgba(212,175,55,0.18); color: var(--gold); }
+[data-theme="sombre"] .nav-cta-link:hover { color: var(--black); }
+
+@media (max-width: 900px) {
+  .header__top { padding-top: 14px; padding-bottom: 12px; }
+  .icon-btn { width: 34px; height: 34px; }
+}
