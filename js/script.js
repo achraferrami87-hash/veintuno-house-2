@@ -2425,6 +2425,34 @@ function initFindYourScent() {
   });
 }
 
+// Mobile bottom tab bar — navigation-only sugar, no cart/business logic.
+// The "Panier" tab simply clicks the existing header cart icon so it reuses
+// the exact same drawer/open('bag') logic instead of duplicating it.
+(() => {
+  const bar = document.getElementById('mobileTabbar');
+  if (!bar) return;
+  const cartTab = document.getElementById('mobileTabbarCart');
+  const tabs = bar.querySelectorAll('.mobile-tabbar__item');
+  if (cartTab) {
+    cartTab.addEventListener('click', () => {
+      document.getElementById('cartToggle')?.click();
+    });
+  }
+  function syncActiveTab() {
+    const hash = window.location.hash.replace('#', '');
+    tabs.forEach((el) => {
+      const tab = el.dataset.tab;
+      const isActive =
+        (tab === 'home' && (hash === '' || hash === 'accueil')) ||
+        (tab === 'shop' && (hash === 'collections' || hash.startsWith('collection/') || hash.startsWith('product/') || hash.startsWith('compose'))) ||
+        (tab === 'account' && hash === 'loyalty');
+      el.classList.toggle('is-active', isActive);
+    });
+  }
+  window.addEventListener('hashchange', syncActiveTab);
+  syncActiveTab();
+})();
+
 // Boot
 initHomepage();
 initQuickView();
