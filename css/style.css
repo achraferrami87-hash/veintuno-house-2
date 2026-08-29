@@ -2123,3 +2123,16 @@ a { transition: color 0.2s ease; }
   .header__top { padding-top: 14px; padding-bottom: 12px; }
   .icon-btn { width: 34px; height: 34px; }
 }
+
+/* ===========================
+   Pack composer — fragrance picker image size
+   Same root cause as the earlier product-grid fix: this box only had a
+   fixed WIDTH, so a real uploaded photo (e.g. a Parfums product, which is
+   pack-only and therefore ONLY ever shown here, never in a product grid)
+   rendered at whatever tiny size its own aspect ratio produced. A fixed
+   height lets object-fit:contain scale it up to fill the frame properly,
+   matching the illustration's visual size. Scoped to .fragrance-card only
+   — no change to selection/quantity logic.
+=========================== */
+.fragrance-card .product-card__bottle { width: 100%; max-width: 130px; height: 150px; margin: 10px auto 16px; }
+.fragrance-card .product-card__bottle svg { height: 100%; }
