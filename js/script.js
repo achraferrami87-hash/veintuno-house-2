@@ -187,6 +187,15 @@ function stripAccents(str) {
 // composer — instant client-side search (by name or notes) plus the same
 // Homme/Femme/Unisexe/Tous gender chips used on collection pages. Filtering
 // only toggles visibility; it never touches selection state.
+// Matches if the query is a prefix of any whole word in the text — typing
+// "Ro" finds "Rose Lumière" and "Cèdre Royal" but not "Stronger" (which only
+// contains "ro" mid-word). Closer to what a customer expects from "start
+// typing a name" than a plain substring-anywhere match.
+function matchesByWordPrefix(text, q) {
+  if (!q) return true;
+  return text.split(/\s+/).some((word) => word.startsWith(q));
+}
+
 function initFragranceToolbar({ searchInput, genderFilter, cards, emptyMsg }) {
   let query = '';
   let gender = '';
@@ -198,7 +207,7 @@ function initFragranceToolbar({ searchInput, genderFilter, cards, emptyMsg }) {
       const name = stripAccents((card.dataset.name || '').toLowerCase());
       const notesEl = card.querySelector('.product-card__notes');
       const notes = stripAccents((notesEl ? notesEl.textContent : '').toLowerCase());
-      const matchesSearch = !q || name.includes(q) || notes.includes(q);
+      const matchesSearch = matchesByWordPrefix(name, q) || matchesByWordPrefix(notes, q);
       const genders = (card.dataset.genders || '').split(',').filter(Boolean);
       const matchesGender = !gender || genders.includes(gender);
       const visible = matchesSearch && matchesGender;
