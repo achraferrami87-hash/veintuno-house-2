@@ -45,7 +45,18 @@ try {
 
 <a href="#view-home" class="skip-link">Aller au contenu principal</a>
 
-<div class="topbar" id="announcementBar">Livraison offerte partout au Maroc</div>
+<div class="topbar" id="announcementBar">
+  <div class="topbar__track">
+    <div class="topbar__item">
+      <span class="topbar__text">Livraison offerte partout au Maroc</span>
+      <a href="#collections" class="topbar__cta">Achetez maintenant</a>
+    </div>
+    <div class="topbar__item" aria-hidden="true">
+      <span class="topbar__text">Livraison offerte partout au Maroc</span>
+      <a href="#collections" class="topbar__cta" tabindex="-1">Achetez maintenant</a>
+    </div>
+  </div>
+</div>
 
 <header class="header" id="header">
   <div class="container header__top">
@@ -399,6 +410,13 @@ try {
     <span>Compte</span>
   </a>
 </nav>
+
+<!-- FLOATING WHATSAPP BUTTON — href/visibility set dynamically from the
+     WhatsApp number configured in the admin dashboard (Réglages > Contact).
+     Stays hidden until a valid link is available; never hardcoded. -->
+<a href="#" target="_blank" rel="noopener" class="whatsapp-float" id="whatsappFloat" aria-label="Discuter sur WhatsApp" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5A11 11 0 0 0 3.7 17.4L2 22l4.8-1.6A11 11 0 1 0 20.5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.5 8.7c-.3.6-.5 1.4-.3 2.4.4 2 2.6 4.4 4.7 4.9 1 .2 1.8 0 2.4-.3.5-.2 1-.7 1.1-1.2l.1-.6-2-1c-.2-.1-.4-.1-.5.1l-.5.7c-.1.2-.3.2-.5.1-.7-.3-1.9-1.2-2.5-2.4-.1-.2 0-.4.1-.5l.6-.6c.1-.1.1-.3.1-.5l-.9-2c0-.1-.2-.2-.4-.2h-.7c-.2 0-.5.1-.7.1Z" fill="currentColor"/></svg>
+</a>
 
 <script src="js/script.js"></script>
 </body>

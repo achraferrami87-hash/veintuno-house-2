@@ -1976,7 +1976,23 @@ async function initAnnouncementBar() {
   const bar = document.getElementById('announcementBar');
   if (!bar) return;
   const settings = await getSiteSettings();
-  if (settings && settings.announcementText) bar.textContent = settings.announcementText;
+  if (settings && settings.announcementText) {
+    bar.querySelectorAll('.topbar__text').forEach((el) => { el.textContent = settings.announcementText; });
+  }
+}
+
+// Floating WhatsApp button — visible on both desktop and mobile once a
+// WhatsApp number/link is configured in the admin dashboard (Réglages >
+// Contact, the existing whatsappNumber field). Stays hidden otherwise —
+// never a hardcoded number, never an invalid link.
+async function initWhatsappFloat() {
+  const btn = document.getElementById('whatsappFloat');
+  if (!btn) return;
+  const settings = await getSiteSettings();
+  const href = settings && whatsappHref(settings.whatsappNumber);
+  if (!href) return;
+  btn.href = href;
+  btn.hidden = false;
 }
 
 // ===========================
@@ -2605,5 +2621,6 @@ initLoyaltyPage();
 initContactPage();
 initThemeSwitch();
 initAnnouncementBar();
+initWhatsappFloat();
 initMetaPixel();
 initFindYourScent();

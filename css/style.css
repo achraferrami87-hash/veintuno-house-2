@@ -104,11 +104,50 @@ em { font-style: italic; color: var(--gold); }
 .topbar {
   background: var(--black);
   color: var(--gold);
-  text-align: center;
   font-size: 12px;
   letter-spacing: 1px;
-  padding: 8px 12px;
+  padding: 8px 0;
   text-transform: uppercase;
+  overflow: hidden;
+}
+/* Seamless right-to-left marquee: two identical copies of the text+CTA in a
+   row twice the container's width, sliding by exactly one copy's width
+   (-50%) so the loop point is invisible. Very slow (premium, not attention-
+   grabbing) and paused on hover so the CTA is always easy to click. This is
+   NOT a carousel — one continuous strip, never paginated/swapped. */
+.topbar__track {
+  display: flex;
+  width: max-content;
+  animation: topbar-marquee 34s linear infinite;
+}
+.topbar__track:hover { animation-play-state: paused; }
+.topbar__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 0 44px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.topbar__cta {
+  display: inline-flex;
+  align-items: center;
+  background: var(--gold);
+  color: var(--black);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.topbar__cta:hover { background: var(--gold-light); transform: translateY(-1px); }
+@keyframes topbar-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 /* Header */
@@ -2351,4 +2390,34 @@ a { transition: color 0.2s ease; }
 [data-theme="sombre"] .fragrance-card.is-selected,
 [data-theme="sombre"] .fragrance-card--stepper.is-selected {
   background: var(--black);
+}
+
+/* ===========================
+   Floating WhatsApp button — visible on desktop and mobile once a number is
+   configured (see initWhatsappFloat). Positioned above the mobile bottom
+   tab bar so the two never overlap.
+=========================== */
+.whatsapp-float {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 950;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--black);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 26px rgba(12,12,12,0.3);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.whatsapp-float svg { width: 26px; height: 26px; }
+.whatsapp-float:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 14px 32px rgba(12,12,12,0.35); }
+[data-theme="sombre"] .whatsapp-float { background: var(--gold); color: var(--black); }
+
+@media (max-width: 900px) {
+  .whatsapp-float { right: 16px; bottom: calc(62px + env(safe-area-inset-bottom) + 14px); width: 48px; height: 48px; }
+  .whatsapp-float svg { width: 23px; height: 23px; }
 }
