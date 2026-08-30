@@ -1379,9 +1379,17 @@ em { font-style: italic; color: var(--gold); }
 /* ===========================
    Compose Pack — dedicated pages
 =========================== */
-.compose-page { padding: 130px 0 160px; }
+/* min-height guards against the fixed "Ajouter au panier" bar overlapping
+   the "no results" message when a search/filter combo hides every card —
+   the page would otherwise be short enough for the fixed bar to sit on
+   top of the message instead of below it. */
+.compose-page { padding: 130px 0 160px; min-height: 100vh; }
 .compose-progress { margin: 30px 0 36px; max-width: 480px; }
-.compose-fragrance-grid { margin-bottom: 140px; }
+/* min-height keeps the page comfortably taller than the viewport even when
+   a search/filter combo hides every card, so the fixed "Ajouter au panier"
+   bar always floats over trailing empty space instead of sitting on top of
+   the "no results" message. */
+.compose-fragrance-grid { margin-bottom: 140px; min-height: 320px; }
 .compose-sticky-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
   background: var(--white); border-top: 1px solid rgba(0,0,0,0.1);
@@ -1925,6 +1933,7 @@ a { transition: color 0.2s ease; }
   display: flex;
   flex-direction: column;
 }
+.products__grid .product-card[hidden] { display: none; }
 .products__grid .product-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 22px 46px rgba(12,12,12,0.25);
@@ -2291,6 +2300,13 @@ a { transition: color 0.2s ease; }
   display: flex;
   flex-direction: column;
 }
+/* Same specificity as a bare "[hidden]" UA-stylesheet rule, but author
+   styles always win ties over user-agent defaults — so the display:flex
+   above was silently defeating card.hidden = true in the search/filter
+   toolbar (the JS was setting the attribute correctly the whole time; the
+   card just never actually disappeared). This re-asserts display:none for
+   a hidden card with higher specificity than the bare class rule. */
+.fragrance-card[hidden] { display: none; }
 .fragrance-card:hover { box-shadow: 0 20px 44px rgba(12,12,12,0.22); }
 
 .fragrance-card__media {
