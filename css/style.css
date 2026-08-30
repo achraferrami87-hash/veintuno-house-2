@@ -2421,3 +2421,24 @@ a { transition: color 0.2s ease; }
   .whatsapp-float { right: 16px; bottom: calc(62px + env(safe-area-inset-bottom) + 14px); width: 48px; height: 48px; }
   .whatsapp-float svg { width: 23px; height: 23px; }
 }
+
+/* ===========================
+   Pack composer — fragrance picker, mobile: 2 per row instead of 1.
+   Scoped to .compose-fragrance-grid only, not the plain .chooser-grid
+   (pack-size/formula picker), which has different content and stays as-is.
+=========================== */
+@media (max-width: 640px) {
+  .compose-fragrance-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .compose-fragrance-grid .fragrance-card { border-radius: 12px; }
+  .compose-fragrance-grid .fragrance-card__footer { padding: 14px 14px 16px; gap: 5px; }
+  .compose-fragrance-grid .fragrance-card__footer h3 { font-size: 15px; }
+  .compose-fragrance-grid .product-card__notes { font-size: 9px; }
+  .compose-fragrance-grid .product-card__price { font-size: 13px; }
+  .compose-fragrance-grid .product-card__tag { top: 10px; left: 10px; font-size: 9px; padding: 5px 9px 5px 8px; }
+  .compose-fragrance-grid .fragrance-card__check { top: 10px; right: 10px; }
+  .compose-fragrance-grid .fragrance-card__details { font-size: 11px; }
+  .compose-fragrance-grid .fragrance-card__qty { transform: scale(0.92); transform-origin: left center; }
+}
