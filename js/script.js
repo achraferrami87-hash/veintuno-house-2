@@ -2330,11 +2330,75 @@ function initRevealAnimations() {
     applyGenderFilter(chip.dataset.gender);
   });
 
+  // Collections page — category filter (Tous + one chip per real collection,
+  // plus a "Bundles" chip) and a live name search. Both act on data already
+  // fetched for the page, so switching chips/typing never re-hits the API.
+  const collectionsSearch = document.getElementById('collectionsSearch');
+  const collectionsCategoryFilter = document.getElementById('collectionsCategoryFilter');
+  const collectionsEmptyMsg = document.getElementById('collectionsEmptyMsg');
+  let allCollectionsData = [];
+  let allBundlesData = [];
+  let collectionsCategory = '';
+
+  function bundleTileHTML(b) {
+    const style = b.image ? ` style="--tile-image:url('${b.image}')"` : '';
+    return `
+      <a href="#bundle/${b.slug}" class="collection-tile has-image"${style}>
+        <span class="collection-tile__label">${b.name}</span>
+        <span class="collection-tile__sub">${b.price} MAD</span>
+      </a>`;
+  }
+
+  function applyCollectionsFilter() {
+    if (!collectionsGrid) return;
+    const q = stripAccents((collectionsSearch ? collectionsSearch.value : '').trim().toLowerCase());
+    let list;
+    let tileFn;
+    if (collectionsCategory === 'bundles') {
+      list = allBundlesData;
+      tileFn = bundleTileHTML;
+    } else if (collectionsCategory) {
+      list = allCollectionsData.filter((c) => c.slug === collectionsCategory);
+      tileFn = collectionTileHTML;
+    } else {
+      list = allCollectionsData;
+      tileFn = collectionTileHTML;
+    }
+    const filtered = q ? list.filter((item) => matchesByWordPrefix(stripAccents(item.name.toLowerCase()), q)) : list;
+    collectionsGrid.innerHTML = filtered.map(tileFn).join('');
+    if (collectionsEmptyMsg) collectionsEmptyMsg.hidden = filtered.length > 0;
+  }
+
+  if (collectionsSearch) {
+    collectionsSearch.addEventListener('input', applyCollectionsFilter);
+  }
+  if (collectionsCategoryFilter) {
+    collectionsCategoryFilter.addEventListener('click', (e) => {
+      const chip = e.target.closest('.gender-filter__chip');
+      if (!chip) return;
+      collectionsCategoryFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      collectionsCategory = chip.dataset.category;
+      applyCollectionsFilter();
+    });
+  }
+
   let collectionsLoaded = false;
   async function renderCollectionsGrid() {
     if (collectionsLoaded) return;
-    const collections = await api('/collections');
-    collectionsGrid.innerHTML = collections.map(collectionTileHTML).join('');
+    const [collections, bundles] = await Promise.all([
+      api('/collections'),
+      api('/bundles').catch(() => []),
+    ]);
+    allCollectionsData = collections;
+    allBundlesData = bundles;
+    if (collectionsCategoryFilter) {
+      collectionsCategoryFilter.innerHTML = `
+        <div class="gender-filter__chip is-active" data-category="">Tous</div>
+        ${collections.map((c) => `<div class="gender-filter__chip" data-category="${c.slug}">${c.name}</div>`).join('')}
+        ${bundles.length ? '<div class="gender-filter__chip" data-category="bundles">Bundles</div>' : ''}`;
+    }
+    applyCollectionsFilter();
     collectionsLoaded = true;
   }
 

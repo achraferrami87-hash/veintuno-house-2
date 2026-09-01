@@ -123,6 +123,14 @@ try {
   <div class="container">
     <p class="section__eyebrow">La Maison</p>
     <h2 class="section__title">Nos collections</h2>
+    <div class="compose-toolbar">
+      <div class="compose-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M21 21 L16.6 16.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <input type="text" id="collectionsSearch" placeholder="Rechercher une collection...">
+      </div>
+      <div class="gender-filter" id="collectionsCategoryFilter"></div>
+    </div>
+    <p class="admin-field-help compose-empty-msg" id="collectionsEmptyMsg" hidden>Aucun résultat.</p>
     <div class="collections-page__grid" id="collectionsGrid"></div>
   </div>
 </section>

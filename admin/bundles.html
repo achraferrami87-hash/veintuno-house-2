@@ -114,7 +114,13 @@ function openBundleModal(bundle) {
           <div class="admin-field"><label>Prix fixe (MAD)</label><input type="number" step="0.01" name="price" required value="${isEdit ? bundle.price : ''}"></div>
         </div>
         <div class="admin-field"><label>Description</label><textarea name="description" rows="2">${isEdit && bundle.description ? bundle.description : ''}</textarea></div>
-        <div class="admin-field"><label>URL image (optionnel — utilisez la page Produits pour uploader puis collez l'URL ici)</label><input name="image" value="${isEdit && bundle.image ? bundle.image : ''}"></div>
+        <div class="admin-field">
+          <label>Image du bundle</label>
+          <div id="bundleImagePreview" style="margin-bottom:8px;">${isEdit && bundle.image ? `<img src="${bundle.image}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;">` : ''}</div>
+          <input type="file" id="bundleImageUpload" accept="image/*">
+          <p class="admin-field-help">Ou collez une URL directement :</p>
+          <input name="image" id="bundleImageUrl" value="${isEdit && bundle.image ? bundle.image : ''}">
+        </div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || bundle.isActive ? 'checked' : ''}> Actif</label>
         <div class="admin-field">
           <label>Collections où ce bundle doit apparaître</label>
@@ -143,6 +149,19 @@ function openBundleModal(bundle) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('bundleImageUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      document.getElementById('bundleImageUrl').value = result.url;
+      document.getElementById('bundleImagePreview').innerHTML = `<img src="${result.url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;">`;
+    } catch (err) { toast(err.message, 'error'); }
+    e.target.value = '';
+  });
 
   document.getElementById('bundleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
