@@ -2330,6 +2330,43 @@ function initRevealAnimations() {
     applyGenderFilter(chip.dataset.gender);
   });
 
+  // Non-perfume collection detail pages (Gels Douche, Supplements,
+  // Cosmetics...) get a product-name search plus a "Bundles" filter chip,
+  // mirroring the same toolbar already used on the /collections page.
+  const collectionDetailToolbar = document.getElementById('collectionDetailToolbar');
+  const collectionDetailSearch = document.getElementById('collectionDetailSearch');
+  const collectionDetailCategoryFilter = document.getElementById('collectionDetailCategoryFilter');
+  const collectionDetailEmptyMsg = document.getElementById('collectionDetailEmptyMsg');
+  let collectionDetailCategory = '';
+
+  function applyCollectionDetailFilter() {
+    const q = stripAccents((collectionDetailSearch ? collectionDetailSearch.value : '').trim().toLowerCase());
+    let products = currentCollectionProducts;
+    let bundles = currentCollectionBundles;
+    if (collectionDetailCategory === 'bundles') products = [];
+    if (q) {
+      products = products.filter((p) => matchesByWordPrefix(stripAccents(p.name.toLowerCase()), q));
+      bundles = bundles.filter((b) => matchesByWordPrefix(stripAccents(b.name.toLowerCase()), q));
+    }
+    detailGrid.innerHTML = products.map(productCardHTML).join('') + bundles.map(bundleCardHTML).join('');
+    if (collectionDetailEmptyMsg) collectionDetailEmptyMsg.hidden = (products.length + bundles.length) > 0;
+    initRevealAnimations();
+  }
+
+  if (collectionDetailSearch) {
+    collectionDetailSearch.addEventListener('input', applyCollectionDetailFilter);
+  }
+  if (collectionDetailCategoryFilter) {
+    collectionDetailCategoryFilter.addEventListener('click', (e) => {
+      const chip = e.target.closest('.gender-filter__chip');
+      if (!chip) return;
+      collectionDetailCategoryFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      collectionDetailCategory = chip.dataset.category;
+      applyCollectionDetailFilter();
+    });
+  }
+
   // Collections page — category filter (Tous + one chip per real collection,
   // plus a "Bundles" chip) and a live name search. Both act on data already
   // fetched for the page, so switching chips/typing never re-hits the API.
@@ -2449,6 +2486,7 @@ function initRevealAnimations() {
       // browsing lands on the pack list above; picking a pack is what reveals
       // "Now Choose Your Scents" (the existing composer flow) below.
       genderFilter.hidden = true;
+      if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
       if (findScentCta) findScentCta.hidden = false;
       detailGrid.innerHTML = `
         <div class="pack-only-notice">
@@ -2457,14 +2495,22 @@ function initRevealAnimations() {
         </div>`;
     } else if (slug === 'parfums') {
       if (findScentCta) findScentCta.hidden = true;
+      if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');
     } else {
       if (findScentCta) findScentCta.hidden = true;
       genderFilter.hidden = true;
-      detailGrid.innerHTML = data.products.map(productCardHTML).join('') + currentCollectionBundles.map(bundleCardHTML).join('');
-      initRevealAnimations();
+      collectionDetailCategory = '';
+      if (collectionDetailSearch) collectionDetailSearch.value = '';
+      if (collectionDetailToolbar) collectionDetailToolbar.hidden = false;
+      if (collectionDetailCategoryFilter) {
+        collectionDetailCategoryFilter.innerHTML = `
+          <div class="gender-filter__chip is-active" data-category="">Tous</div>
+          ${currentCollectionBundles.length ? '<div class="gender-filter__chip" data-category="bundles">Bundles</div>' : ''}`;
+      }
+      applyCollectionDetailFilter();
     }
   }
 
