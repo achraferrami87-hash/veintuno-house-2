@@ -29,10 +29,12 @@ function withGendersArray(product) {
   let genders = [];
   try { genders = JSON.parse(product.genders || '[]'); } catch (e) { genders = []; }
   if (genders.length === 0 && product.gender) genders = [product.gender];
+  let filterOptionIds = [];
+  try { filterOptionIds = JSON.parse(product.filterOptionIds || '[]'); } catch (e) { filterOptionIds = []; }
   const characteristicIds = Array.isArray(product.characteristics)
     ? product.characteristics.map((c) => c.characteristicId)
     : undefined;
-  const out = { ...product, genders };
+  const out = { ...product, genders, filterOptionIds };
   if (characteristicIds) out.characteristicIds = characteristicIds;
   return out;
 }
@@ -92,6 +94,7 @@ router.post('/', async (req, res) => {
       notesBase: body.notesBase || null,
       gender: Array.isArray(body.genders) && body.genders.length ? body.genders[0] : (body.gender || null),
       genders: JSON.stringify(Array.isArray(body.genders) ? body.genders : (body.gender ? [body.gender] : [])),
+      filterOptionIds: JSON.stringify(Array.isArray(body.filterOptionIds) ? body.filterOptionIds : []),
       volume: body.volume || null,
       price: Number(body.price),
       stock: Number(body.stock) || 0,
@@ -130,6 +133,9 @@ router.put('/:id', async (req, res) => {
     data.gender = gArr.length ? gArr[0] : null;
   } else if (body.gender !== undefined) {
     data.gender = body.gender || null;
+  }
+  if (body.filterOptionIds !== undefined) {
+    data.filterOptionIds = JSON.stringify(Array.isArray(body.filterOptionIds) ? body.filterOptionIds : []);
   }
   if (body.volume !== undefined) data.volume = body.volume || null;
   const numFields = ['price', 'stock', 'lowStockThreshold', 'position'];

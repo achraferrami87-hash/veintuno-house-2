@@ -37,6 +37,11 @@ model Collection {
   // straight into the pack chooser. Off by default so existing collections
   // (e.g. gel douche) keep selling individually exactly as before.
   packOnly    Boolean  @default(false)
+  // Per-collection storefront toolbar toggles (collection detail page).
+  // Both default to today's behavior for every existing collection: the
+  // search bar was already always shown, and no custom filter existed yet.
+  showSearch  Boolean  @default(true)
+  showFilter  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -45,6 +50,20 @@ model Collection {
   freePackCollections  FreePackEligibleCollection[]
   promoCodeCollections PromoCodeCollection[]
   bundles              Bundle[] @relation("BundleCollections")
+  filterOptions        CollectionFilterOption[]
+}
+
+// Admin-defined filter chip labels, scoped to one collection (e.g. for
+// "Cosmetics": Soin visage / Corps / Cheveux). Only used when that
+// collection's `showFilter` is on. Products tag themselves against these via
+// Product.filterOptionIds (same JSON-array-of-ids pattern as genders).
+model CollectionFilterOption {
+  id           String @id @default(cuid())
+  label        String
+  position     Int    @default(0)
+
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 }
 
 model Product {
@@ -58,6 +77,7 @@ model Product {
   notesBase         String?
   gender            String? // legacy single value — kept for backward compatibility, no longer written to
   genders           String   @default("[]") // JSON array — a product can belong to several genders at once (e.g. Homme + Femme)
+  filterOptionIds   String   @default("[]") // JSON array of CollectionFilterOption ids this product is tagged with (its own collection's custom filter)
   volume            String?  @default("50ML")
   price             Float
   stock             Int      @default(0)

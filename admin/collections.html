@@ -106,6 +106,28 @@ function openModal(collection) {
         <p class="admin-field-help">Retirer une collection du menu ne la supprime jamais du site — elle reste accessible via la page Collections.</p>
         <label class="admin-checkbox"><input type="checkbox" name="packOnly" ${isEdit && collection.packOnly ? 'checked' : ''}> Vente uniquement en pack</label>
         <p class="admin-field-help">Si coché, les produits de cette collection ne peuvent pas être ajoutés au panier individuellement — le client doit d'abord choisir un pack.</p>
+
+        <label class="admin-checkbox"><input type="checkbox" name="showSearch" ${!isEdit || collection.showSearch !== false ? 'checked' : ''}> Afficher la barre de recherche sur la page de cette collection</label>
+        <label class="admin-checkbox"><input type="checkbox" name="showFilter" id="showFilterCheck" ${isEdit && collection.showFilter ? 'checked' : ''}> Afficher un filtre sur la page de cette collection</label>
+
+        <div class="admin-field" id="filterOptionsSection" style="${isEdit && collection.showFilter ? '' : 'display:none;'}">
+          <label>Options du filtre</label>
+          <p class="admin-field-help">Ces libellés apparaîtront comme chips de filtre sur la page de la collection. Chaque produit choisit ensuite à quelle(s) option(s) il appartient, dans sa fiche produit.</p>
+          ${isEdit ? `
+            <div id="filterOptionsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+              ${(collection.filterOptions || []).map((o) => `
+                <div class="admin-checkbox" style="justify-content:space-between;" data-option-id="${o.id}">
+                  <span>${o.label}</span>
+                  <button type="button" class="admin-btn admin-btn--ghost is-danger" data-remove-option="${o.id}" style="padding:2px 10px;">Supprimer</button>
+                </div>`).join('') || '<p class="admin-field-help">Aucune option pour le moment.</p>'}
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="newFilterOptionInput" placeholder="ex. Soin visage">
+              <button type="button" class="admin-btn admin-btn--ghost" id="addFilterOptionBtn">Ajouter</button>
+            </div>
+          ` : '<p class="admin-field-help">Enregistrez d\'abord la collection, puis rouvrez "Modifier" pour ajouter les options du filtre.</p>'}
+        </div>
+
         <div class="admin-modal__actions">
           <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
           <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
@@ -115,6 +137,44 @@ function openModal(collection) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  document.getElementById('showFilterCheck').addEventListener('change', (e) => {
+    document.getElementById('filterOptionsSection').style.display = e.target.checked ? 'block' : 'none';
+  });
+
+  if (isEdit) {
+    async function reloadFilterOptions() {
+      const options = await adminApi(`/collection-filters?collectionId=${collection.id}`);
+      collection.filterOptions = options;
+      document.getElementById('filterOptionsList').innerHTML = options.map((o) => `
+        <div class="admin-checkbox" style="justify-content:space-between;" data-option-id="${o.id}">
+          <span>${o.label}</span>
+          <button type="button" class="admin-btn admin-btn--ghost is-danger" data-remove-option="${o.id}" style="padding:2px 10px;">Supprimer</button>
+        </div>`).join('') || '<p class="admin-field-help">Aucune option pour le moment.</p>';
+    }
+
+    document.getElementById('addFilterOptionBtn').addEventListener('click', async () => {
+      const input = document.getElementById('newFilterOptionInput');
+      const label = input.value.trim();
+      if (!label) return;
+      try {
+        await adminApi('/collection-filters', { method: 'POST', body: JSON.stringify({ collectionId: collection.id, label }) });
+        input.value = '';
+        await reloadFilterOptions();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    document.getElementById('filterOptionsList').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-remove-option]');
+      if (!btn) return;
+      const ok = await confirmDialog('Supprimer cette option de filtre ? Elle sera retirée des produits qui la portent.');
+      if (!ok) return;
+      try {
+        await adminApi(`/collection-filters/${btn.dataset.removeOption}`, { method: 'DELETE' });
+        await reloadFilterOptions();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  }
 
   document.getElementById('imgUpload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -130,7 +190,11 @@ function openModal(collection) {
   document.getElementById('collectionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const payload = { name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on', packOnly: fd.get('packOnly') === 'on' };
+    const payload = {
+      name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null,
+      isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on', packOnly: fd.get('packOnly') === 'on',
+      showSearch: fd.get('showSearch') === 'on', showFilter: fd.get('showFilter') === 'on',
+    };
     try {
       if (isEdit) await adminApi(`/collections/${collection.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await adminApi('/collections', { method: 'POST', body: JSON.stringify(payload) });

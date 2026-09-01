@@ -28,7 +28,7 @@ async function uniqueSlug(base, ignoreId) {
 router.get('/', async (req, res) => {
   const collections = await prisma.collection.findMany({
     orderBy: { position: 'asc' },
-    include: { _count: { select: { products: true, packs: true } } },
+    include: { _count: { select: { products: true, packs: true } }, filterOptions: { orderBy: { position: 'asc' } } },
   });
   res.json(collections);
 });
@@ -36,19 +36,23 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const collection = await prisma.collection.findUnique({
     where: { id: req.params.id },
-    include: { products: true, packs: true },
+    include: { products: true, packs: true, filterOptions: { orderBy: { position: 'asc' } } },
   });
   if (!collection) return res.status(404).json({ error: 'Collection introuvable.' });
   res.json(collection);
 });
 
 router.post('/', async (req, res) => {
-  const { name, description, image, showInNav, packOnly } = req.body;
+  const { name, description, image, showInNav, packOnly, showSearch, showFilter } = req.body;
   if (!name) return res.status(400).json({ error: 'Nom requis.' });
   const slug = await uniqueSlug(name);
   const count = await prisma.collection.count();
   const collection = await prisma.collection.create({
-    data: { slug, name, description: description || null, image: image || null, position: count, showInNav: showInNav !== false, packOnly: !!packOnly },
+    data: {
+      slug, name, description: description || null, image: image || null, position: count,
+      showInNav: showInNav !== false, packOnly: !!packOnly,
+      showSearch: showSearch !== false, showFilter: !!showFilter,
+    },
   });
   res.status(201).json(collection);
 });
@@ -60,6 +64,8 @@ router.put('/:id', async (req, res) => {
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
   if (body.showInNav !== undefined) data.showInNav = !!body.showInNav;
   if (body.packOnly !== undefined) data.packOnly = !!body.packOnly;
+  if (body.showSearch !== undefined) data.showSearch = !!body.showSearch;
+  if (body.showFilter !== undefined) data.showFilter = !!body.showFilter;
   if (body.position !== undefined) data.position = Number(body.position);
   if (body.regenerateSlug && body.name) data.slug = await uniqueSlug(body.name, req.params.id);
 

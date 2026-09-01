@@ -2334,6 +2334,7 @@ function initRevealAnimations() {
   // Cosmetics...) get a product-name search plus a "Bundles" filter chip,
   // mirroring the same toolbar already used on the /collections page.
   const collectionDetailToolbar = document.getElementById('collectionDetailToolbar');
+  const collectionDetailSearchBox = document.getElementById('collectionDetailSearchBox');
   const collectionDetailSearch = document.getElementById('collectionDetailSearch');
   const collectionDetailCategoryFilter = document.getElementById('collectionDetailCategoryFilter');
   const collectionDetailEmptyMsg = document.getElementById('collectionDetailEmptyMsg');
@@ -2343,7 +2344,14 @@ function initRevealAnimations() {
     const q = stripAccents((collectionDetailSearch ? collectionDetailSearch.value : '').trim().toLowerCase());
     let products = currentCollectionProducts;
     let bundles = currentCollectionBundles;
-    if (collectionDetailCategory === 'bundles') products = [];
+    if (collectionDetailCategory === 'bundles') {
+      products = [];
+    } else if (collectionDetailCategory) {
+      // A custom, admin-defined filter option (Collection > Options du filtre) —
+      // products opt in via their own "Filtre de la collection" checkboxes.
+      products = products.filter((p) => Array.isArray(p.filterOptionIds) && p.filterOptionIds.includes(collectionDetailCategory));
+      bundles = [];
+    }
     if (q) {
       products = products.filter((p) => matchesByWordPrefix(stripAccents(p.name.toLowerCase()), q));
       bundles = bundles.filter((b) => matchesByWordPrefix(stripAccents(b.name.toLowerCase()), q));
@@ -2504,12 +2512,28 @@ function initRevealAnimations() {
       genderFilter.hidden = true;
       collectionDetailCategory = '';
       if (collectionDetailSearch) collectionDetailSearch.value = '';
-      if (collectionDetailToolbar) collectionDetailToolbar.hidden = false;
+
+      // Both toggles default to today's behavior for every collection that
+      // predates this feature: search always on, no custom filter (Bundles
+      // still shows whenever the collection has one — that's a separate,
+      // always-on capability, not gated by this admin toggle).
+      const showSearch = data.collection.showSearch !== false;
+      const showFilter = !!data.collection.showFilter;
+      const filterOptions = showFilter ? (data.collection.filterOptions || []) : [];
+      const hasBundles = currentCollectionBundles.length > 0;
+
+      if (collectionDetailSearchBox) collectionDetailSearchBox.hidden = !showSearch;
       if (collectionDetailCategoryFilter) {
-        collectionDetailCategoryFilter.innerHTML = `
-          <div class="gender-filter__chip is-active" data-category="">Tous</div>
-          ${currentCollectionBundles.length ? '<div class="gender-filter__chip" data-category="bundles">Bundles</div>' : ''}`;
+        const showChips = filterOptions.length > 0 || hasBundles;
+        collectionDetailCategoryFilter.hidden = !showChips;
+        if (showChips) {
+          collectionDetailCategoryFilter.innerHTML = `
+            <div class="gender-filter__chip is-active" data-category="">Tous</div>
+            ${filterOptions.map((o) => `<div class="gender-filter__chip" data-category="${o.id}">${o.label}</div>`).join('')}
+            ${hasBundles ? '<div class="gender-filter__chip" data-category="bundles">Bundles</div>' : ''}`;
+        }
       }
+      if (collectionDetailToolbar) collectionDetailToolbar.hidden = !(showSearch || filterOptions.length > 0 || hasBundles);
       applyCollectionDetailFilter();
     }
   }

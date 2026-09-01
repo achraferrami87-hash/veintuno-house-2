@@ -25,11 +25,13 @@ function parseImages(product) {
   // Backward compatibility: a product only ever migrated with the old
   // single `gender` value still resolves correctly even if `genders` is empty.
   if (genders.length === 0 && product.gender) genders = [product.gender];
+  let filterOptionIds = [];
+  try { filterOptionIds = JSON.parse(product.filterOptionIds || '[]'); } catch (e) { filterOptionIds = []; }
   const { price: displayPrice, onSale } = getEffectivePrice(product);
   const characteristics = Array.isArray(product.characteristics)
     ? product.characteristics.map((c) => c.characteristic.name)
     : undefined;
-  const out = { ...product, images, genders, displayPrice, onSale, originalPrice: product.price };
+  const out = { ...product, images, genders, filterOptionIds, displayPrice, onSale, originalPrice: product.price };
   if (characteristics) out.characteristics = characteristics;
   return out;
 }
@@ -64,7 +66,10 @@ router.get('/collections', async (req, res) => {
 });
 
 router.get('/collections/:slug', async (req, res) => {
-  const collection = await prisma.collection.findUnique({ where: { slug: req.params.slug } });
+  const collection = await prisma.collection.findUnique({
+    where: { slug: req.params.slug },
+    include: { filterOptions: { orderBy: { position: 'asc' } } },
+  });
   if (!collection || !collection.isActive) return res.status(404).json({ error: 'Collection introuvable.' });
 
   const [products, packs, bundles] = await Promise.all([

@@ -183,6 +183,7 @@ function openProductModal(product) {
             <label class="admin-checkbox"><input type="checkbox" name="genders" value="unisexe" ${isEdit && product.genders && product.genders.includes('unisexe') ? 'checked' : ''}> Unisexe</label>
           </div>
         </div>
+        <div class="admin-field" id="productFilterOptionsField"></div>
         <div class="admin-field">
           <label>Caractéristiques olfactives (recherche intelligente + quiz "Find Your Scent")</label>
           <div class="admin-checkbox-grid">
@@ -250,6 +251,22 @@ function openProductModal(product) {
     </div>`;
   document.body.appendChild(overlay);
 
+  const selectedFilterOptionIds = new Set(isEdit ? (product.filterOptionIds || []) : []);
+  function renderProductFilterOptions() {
+    const collectionId = overlay.querySelector('[name="collectionId"]').value;
+    const col = collections.find((c) => c.id === collectionId);
+    const options = (col && col.filterOptions) || [];
+    const field = document.getElementById('productFilterOptionsField');
+    if (!options.length) { field.innerHTML = ''; return; }
+    field.innerHTML = `
+      <label>Filtre de "${col.name}" — à quelle(s) option(s) ce produit appartient-il ?</label>
+      <div class="admin-checkbox-grid">
+        ${options.map((o) => `<label class="admin-checkbox"><input type="checkbox" name="filterOptionIds" value="${o.id}" ${selectedFilterOptionIds.has(o.id) ? 'checked' : ''}> ${o.label}</label>`).join('')}
+      </div>`;
+  }
+  renderProductFilterOptions();
+  overlay.querySelector('[name="collectionId"]').addEventListener('change', renderProductFilterOptions);
+
   function renderImages() {
     document.getElementById('imageList').innerHTML = images.map((url, i) => `
       <div style="position:relative;">
@@ -289,7 +306,7 @@ function openProductModal(product) {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
       price: fd.get('price'), stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
-      genders: fd.getAll('genders'), characteristicIds: fd.getAll('characteristicIds'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      genders: fd.getAll('genders'), characteristicIds: fd.getAll('characteristicIds'), filterOptionIds: fd.getAll('filterOptionIds'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
       images,
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',

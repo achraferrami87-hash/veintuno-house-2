@@ -23,6 +23,7 @@ const adminBundlesRoutes = require('./routes/adminBundles');
 const adminReviewsRoutes = require('./routes/adminReviews');
 const adminCharacteristicsRoutes = require('./routes/adminCharacteristics');
 const adminQuizRoutes = require('./routes/adminQuiz');
+const adminCollectionFiltersRoutes = require('./routes/adminCollectionFilters');
 
 const app = express();
 
@@ -71,6 +72,7 @@ app.use('/api/admin/bundles', requireAdmin, adminBundlesRoutes);
 app.use('/api/admin/reviews', requireAdmin, adminReviewsRoutes);
 app.use('/api/admin/characteristics', requireAdmin, adminCharacteristicsRoutes);
 app.use('/api/admin/quiz', requireAdmin, adminQuizRoutes);
+app.use('/api/admin/collection-filters', requireAdmin, adminCollectionFiltersRoutes);
 
 // ---------- Static files ----------
 // Uploaded media now lives on Vercel Blob (see routes/adminUpload.js) and is
