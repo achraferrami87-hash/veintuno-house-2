@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
   const bundles = await prisma.bundle.findMany({
     where,
     orderBy: { position: 'asc' },
-    include: { items: { include: { product: true } } },
+    include: { items: { include: { product: true } }, collections: true },
   });
   res.json(bundles);
 });
@@ -37,6 +37,7 @@ router.post('/', async (req, res) => {
   const exists = await prisma.bundle.findUnique({ where: { slug } });
   if (exists) slug = `${slug}-${Date.now().toString(36)}`;
 
+  const collectionIds = Array.isArray(body.collectionIds) ? body.collectionIds : [];
   const bundle = await prisma.bundle.create({
     data: {
       slug,
@@ -46,12 +47,13 @@ router.post('/', async (req, res) => {
       price: Number(body.price),
       isActive: body.isActive !== false,
       position: count,
+      collections: { connect: collectionIds.map((id) => ({ id })) },
     },
   });
   await prisma.bundleItem.createMany({
     data: body.items.map((it) => ({ bundleId: bundle.id, productId: it.productId, quantity: Number(it.quantity) || 1 })),
   });
-  const full = await prisma.bundle.findUnique({ where: { id: bundle.id }, include: { items: { include: { product: true } } } });
+  const full = await prisma.bundle.findUnique({ where: { id: bundle.id }, include: { items: { include: { product: true } }, collections: true } });
   res.status(201).json(full);
 });
 
@@ -62,6 +64,9 @@ router.put('/:id', async (req, res) => {
   if (body.price !== undefined) data.price = Number(body.price);
   if (body.position !== undefined) data.position = Number(body.position);
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
+  if (Array.isArray(body.collectionIds)) {
+    data.collections = { set: body.collectionIds.map((id) => ({ id })) };
+  }
 
   try {
     const bundle = await prisma.bundle.update({ where: { id: req.params.id }, data });
@@ -71,7 +76,7 @@ router.put('/:id', async (req, res) => {
         data: body.items.map((it) => ({ bundleId: bundle.id, productId: it.productId, quantity: Number(it.quantity) || 1 })),
       });
     }
-    const full = await prisma.bundle.findUnique({ where: { id: bundle.id }, include: { items: { include: { product: true } } } });
+    const full = await prisma.bundle.findUnique({ where: { id: bundle.id }, include: { items: { include: { product: true } }, collections: true } });
     res.json(full);
   } catch (e) {
     res.status(404).json({ error: 'Bundle introuvable.' });
@@ -88,7 +93,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.post('/:id/duplicate', async (req, res) => {
-  const original = await prisma.bundle.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  const original = await prisma.bundle.findUnique({ where: { id: req.params.id }, include: { items: true, collections: true } });
   if (!original) return res.status(404).json({ error: 'Bundle introuvable.' });
   let slug = `${original.slug}-copie`;
   const exists = await prisma.bundle.findUnique({ where: { slug } });
@@ -97,6 +102,7 @@ router.post('/:id/duplicate', async (req, res) => {
     data: {
       slug, name: `${original.name} (copie)`, description: original.description,
       image: original.image, price: original.price, isActive: false, position: original.position,
+      collections: { connect: original.collections.map((c) => ({ id: c.id })) },
     },
   });
   if (original.items.length) {
@@ -104,7 +110,7 @@ router.post('/:id/duplicate', async (req, res) => {
       data: original.items.map((it) => ({ bundleId: copy.id, productId: it.productId, quantity: it.quantity })),
     });
   }
-  const full = await prisma.bundle.findUnique({ where: { id: copy.id }, include: { items: { include: { product: true } } } });
+  const full = await prisma.bundle.findUnique({ where: { id: copy.id }, include: { items: { include: { product: true } }, collections: true } });
   res.status(201).json(full);
 });
 

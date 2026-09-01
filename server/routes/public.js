@@ -67,7 +67,7 @@ router.get('/collections/:slug', async (req, res) => {
   const collection = await prisma.collection.findUnique({ where: { slug: req.params.slug } });
   if (!collection || !collection.isActive) return res.status(404).json({ error: 'Collection introuvable.' });
 
-  const [products, packs] = await Promise.all([
+  const [products, packs, bundles] = await Promise.all([
     prisma.product.findMany({
       where: { collectionId: collection.id, isActive: true },
       orderBy: { position: 'asc' },
@@ -76,9 +76,25 @@ router.get('/collections/:slug', async (req, res) => {
       where: { collectionId: collection.id, isActive: true },
       orderBy: { position: 'asc' },
     }),
+    // Bundles assigned to this collection from the admin dashboard — shown
+    // inline in the same product grid, not a separate section.
+    prisma.bundle.findMany({
+      where: { isActive: true, collections: { some: { id: collection.id } } },
+      orderBy: { position: 'asc' },
+      include: { items: { include: { product: true } } },
+    }),
   ]);
 
-  res.json({ collection, products: products.map(parseImages), packs });
+  res.json({
+    collection,
+    products: products.map(parseImages),
+    packs,
+    bundles: bundles.map((b) => ({
+      id: b.id, slug: b.slug, name: b.name, description: b.description,
+      image: b.image, price: b.price,
+      items: b.items.map((it) => ({ product: parseImages(it.product), quantity: it.quantity })),
+    })),
+  });
 });
 
 // ---------- Products ----------

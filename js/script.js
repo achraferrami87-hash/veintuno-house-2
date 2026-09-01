@@ -162,7 +162,7 @@ function productCardHTML(p) {
 document.addEventListener('click', (e) => {
   const card = e.target.closest('.product-card[data-href]');
   if (!card) return;
-  if (e.target.closest('.js-quick-view, .js-add-product, a')) return;
+  if (e.target.closest('.js-quick-view, .js-add-product, .js-add-bundle, a')) return;
   window.location.hash = card.dataset.href;
 });
 
@@ -381,10 +381,20 @@ const Cart = (() => {
   }
 
   function addBundle(bundleId, bundleName, bundlePrice, detail) {
-    items.push({
-      uid: 'bundle-' + Date.now(), kind: 'BUNDLE', bundleId, name: bundleName,
-      unitPrice: Number(bundlePrice), quantity: 1, detail,
-    });
+    // Merges into an existing line for the same bundle (matching addProduct's
+    // pattern) instead of always creating a new one — needed so the bundle
+    // detail page's quantity selector (which calls this once per unit, same
+    // as the product detail page does) shows "×3" on one line rather than
+    // three separate "×1" lines.
+    const existing = items.find((i) => i.kind === 'BUNDLE' && i.bundleId === bundleId);
+    if (existing) {
+      existing.quantity += 1;
+    } else {
+      items.push({
+        uid: 'bundle-' + bundleId, kind: 'BUNDLE', bundleId, name: bundleName,
+        unitPrice: Number(bundlePrice), quantity: 1, detail,
+      });
+    }
     clearPromo(); persist(); renderAll();
     pulseBadge();
     trackPixelEvent('AddToCart', { content_ids: [bundleId], content_name: bundleName, content_type: 'product_group', value: Number(bundlePrice), currency: 'MAD' });
@@ -859,14 +869,14 @@ function bundleCardHTML(b) {
   const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
   const hasPhoto = !!b.image;
   return `
-    <article class="product-card reveal">
+    <article class="product-card reveal" data-href="#bundle/${b.slug}">
       <div class="product-card__media${hasPhoto ? ' product-card__media--photo' : ''}">
         <span class="product-card__tag product-card__tag--gold">Bundle</span>
-        <div class="product-card__bottle">${hasPhoto ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
+        <a href="#bundle/${b.slug}" class="product-card__bottle">${hasPhoto ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</a>
       </div>
       <div class="product-card__footer">
         <div class="product-card__heading">
-          <h3>${cardTitleHTML(b.name)}</h3>
+          <h3><a href="#bundle/${b.slug}">${cardTitleHTML(b.name)}</a></h3>
           <p class="product-card__price">${b.price} MAD</p>
         </div>
         <p class="product-card__notes">${content}</p>
@@ -1876,6 +1886,60 @@ function wireProductDetailActions(scope, product) {
 }
 
 // ===========================
+// BUNDLE DETAIL PAGE — reuses the exact same .product-detail__* markup and
+// styling as a normal product page (per spec: same information, same
+// design), just with a "produits inclus" list instead of fragrance notes
+// and no stock/volume/reviews (bundles don't carry that data).
+// ===========================
+function bundleDetailBodyHTML(b) {
+  const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  return `
+    <div class="product-detail__visual">${b.image ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
+    <div class="product-detail__info">
+      <a href="#collections" class="collection-detail__back">← Retour aux collections</a>
+      <p class="section__eyebrow">Bundle</p>
+      <h1>${b.name}</h1>
+      <div class="product-detail__meta-row">
+        <p class="product-detail__price">${b.price} MAD</p>
+      </div>
+      ${b.description ? `<p class="product-detail__description">${b.description}</p>` : ''}
+      <div class="product-detail__notes">
+        <p><strong>Produits inclus</strong> — ${content}</p>
+      </div>
+      <div class="product-detail__actions">
+        <div class="qty-selector">
+          <button type="button" class="qty-minus" aria-label="Diminuer">−</button>
+          <input type="number" class="qty-input" value="1" min="1">
+          <button type="button" class="qty-plus" aria-label="Augmenter">+</button>
+        </div>
+        <button type="button" class="btn btn--gold js-bundle-detail-add">Ajouter au panier</button>
+      </div>
+    </div>`;
+}
+
+function wireBundleDetailActions(scope, bundle) {
+  const qtyInput = scope.querySelector('.qty-input');
+  const minusBtn = scope.querySelector('.qty-minus');
+  const plusBtn = scope.querySelector('.qty-plus');
+  if (!qtyInput || !minusBtn || !plusBtn) return;
+  minusBtn.addEventListener('click', () => {
+    qtyInput.value = Math.max(1, Number(qtyInput.value) - 1);
+  });
+  plusBtn.addEventListener('click', () => {
+    qtyInput.value = Number(qtyInput.value) + 1;
+  });
+  const addBtn = scope.querySelector('.js-bundle-detail-add');
+  if (addBtn) {
+    const detail = bundle.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+    addBtn.addEventListener('click', () => {
+      const qty = Math.max(1, Number(qtyInput.value) || 1);
+      for (let i = 0; i < qty; i += 1) Cart.addBundle(bundle.id, bundle.name, bundle.price, detail);
+      showAddToCartToast();
+    });
+  }
+}
+
+// ===========================
 // SEARCH
 // ===========================
 function initSearch() {
@@ -2231,6 +2295,7 @@ function initRevealAnimations() {
   const viewCollections = document.getElementById('view-collections');
   const viewDetail = document.getElementById('view-collection-detail');
   const viewProduct = document.getElementById('view-product-detail');
+  const viewBundle = document.getElementById('view-bundle-detail');
   const collectionsGrid = document.getElementById('collectionsGrid');
   const detailTitle = document.getElementById('collectionDetailTitle');
   const detailEyebrow = document.getElementById('collectionDetailEyebrow');
@@ -2242,12 +2307,18 @@ function initRevealAnimations() {
   if (!viewHome || !viewCollections || !viewDetail) return;
 
   let currentCollectionProducts = [];
+  // Bundles assigned to the current collection (from the admin dashboard) —
+  // rendered inline in the same grid as products, not a separate section.
+  // They aren't gender-tagged, so they only show under "Tous", not under a
+  // specific Homme/Femme/Unisexe filter.
+  let currentCollectionBundles = [];
 
   function applyGenderFilter(gender) {
     const filtered = gender
       ? currentCollectionProducts.filter((p) => Array.isArray(p.genders) && p.genders.includes(gender))
       : currentCollectionProducts;
-    detailGrid.innerHTML = filtered.map(productCardHTML).join('');
+    const bundlesHTML = gender ? '' : currentCollectionBundles.map(bundleCardHTML).join('');
+    detailGrid.innerHTML = filtered.map(productCardHTML).join('') + bundlesHTML;
     initRevealAnimations();
   }
 
@@ -2308,6 +2379,7 @@ function initRevealAnimations() {
     }
 
     currentCollectionProducts = data.products;
+    currentCollectionBundles = data.bundles || [];
     if (packOnly) {
       // Perfumes in a pack-only collection are never individually addable —
       // browsing lands on the pack list above; picking a pack is what reveals
@@ -2327,7 +2399,7 @@ function initRevealAnimations() {
     } else {
       if (findScentCta) findScentCta.hidden = true;
       genderFilter.hidden = true;
-      detailGrid.innerHTML = data.products.map(productCardHTML).join('');
+      detailGrid.innerHTML = data.products.map(productCardHTML).join('') + currentCollectionBundles.map(bundleCardHTML).join('');
       initRevealAnimations();
     }
   }
@@ -2367,13 +2439,37 @@ function initRevealAnimations() {
     loadProductReviews(mount.querySelector(`#productReviews-${product.slug}`), product.slug);
   }
 
+  // Same render-sequence guard pattern as renderProductDetail, for the same
+  // reason: a slow fetch for a bundle the customer already navigated away
+  // from must never overwrite a newer page.
+  let bundleDetailRenderSeq = 0;
+
+  async function renderBundleDetail(slug) {
+    const mySeq = ++bundleDetailRenderSeq;
+    const mount = document.getElementById('bundleDetailLayout');
+    let bundle;
+    try {
+      bundle = await api(`/bundles/${slug}`);
+    } catch (e) {
+      if (mySeq !== bundleDetailRenderSeq) return;
+      mount.innerHTML = '<p style="padding:60px;text-align:center;">Bundle introuvable.</p>';
+      return;
+    }
+    if (mySeq !== bundleDetailRenderSeq) return;
+    trackPixelEvent('ViewContent', {
+      content_ids: [bundle.slug], content_name: bundle.name, content_type: 'product_group', value: bundle.price, currency: 'MAD',
+    });
+    mount.innerHTML = bundleDetailBodyHTML(bundle);
+    wireBundleDetailActions(mount, bundle);
+  }
+
   const viewCompose = document.getElementById('view-compose');
   const composeContainer = document.getElementById('composeContainer');
   const viewLoyalty = document.getElementById('view-loyalty');
   const viewContact = document.getElementById('view-contact');
   const viewReceipt = document.getElementById('view-receipt');
   const receiptContainer = document.getElementById('receiptContainer');
-  const allViews = [viewHome, viewCollections, viewDetail, viewProduct, viewCompose, viewLoyalty, viewContact, viewReceipt];
+  const allViews = [viewHome, viewCollections, viewDetail, viewProduct, viewBundle, viewCompose, viewLoyalty, viewContact, viewReceipt];
 
   async function route() {
     let hash = window.location.hash.replace('#', '');
@@ -2401,6 +2497,11 @@ function initRevealAnimations() {
       viewProduct.hidden = false;
       window.scrollTo(0, 0);
       await renderProductDetail(slug);
+    } else if (hash.startsWith('bundle/')) {
+      const slug = hash.split('/')[1];
+      viewBundle.hidden = false;
+      window.scrollTo(0, 0);
+      await renderBundleDetail(slug);
     } else if (hash === 'compose') {
       viewCompose.hidden = false;
       window.scrollTo(0, 0);

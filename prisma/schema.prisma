@@ -44,6 +44,7 @@ model Collection {
   packs                Pack[]
   freePackCollections  FreePackEligibleCollection[]
   promoCodeCollections PromoCodeCollection[]
+  bundles              Bundle[] @relation("BundleCollections")
 }
 
 model Product {
@@ -488,8 +489,12 @@ model Bundle {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items     BundleItem[]
-  orderItems OrderItem[]
+  items       BundleItem[]
+  orderItems  OrderItem[]
+  // Which collections this bundle shows up in, displayed inline alongside
+  // normal products (not a separate "Bundles" section). Many-to-many so an
+  // admin can place the same bundle in several collections at once.
+  collections Collection[] @relation("BundleCollections")
 }
 
 model BundleItem {

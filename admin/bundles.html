@@ -31,7 +31,7 @@
 
     <div class="admin-table-wrap">
       <table class="admin-table">
-        <thead><tr><th></th><th>Bundle</th><th>Contenu</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Bundle</th><th>Contenu</th><th>Collections</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
         <tbody id="bundlesBody"></tbody>
       </table>
     </div>
@@ -42,14 +42,17 @@
 <script>
 let bundles = [];
 let products = [];
+let collections = [];
 
 function bundleRowHTML(b) {
   const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  const collectionNames = (b.collections || []).map((c) => c.name).join(', ') || '<span style="color:var(--gray);">Aucune</span>';
   return `
     <tr data-id="${b.id}">
       <td>${b.image ? `<img src="${b.image}" style="width:48px;height:48px;object-fit:contain;border-radius:6px;">` : ''}</td>
       <td><strong>${b.name}</strong></td>
-      <td style="max-width:340px;">${content}</td>
+      <td style="max-width:280px;">${content}</td>
+      <td style="max-width:200px;">${collectionNames}</td>
       <td>${b.price} MAD</td>
       <td>${b.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}</td>
       <td class="row-actions">
@@ -67,8 +70,13 @@ async function loadAll() {
   if (search) params.set('search', search);
   if (status) params.set('isActive', status);
   const qs = params.toString();
-  [bundles, products] = await Promise.all([adminApi(`/bundles${qs ? `?${qs}` : ''}`), products.length ? Promise.resolve(products) : adminApi('/products')]);
-  document.getElementById('bundlesBody').innerHTML = bundles.map(bundleRowHTML).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);">Aucun bundle pour le moment.</td></tr>';
+  const [bundlesRes, productsRes, collectionsRes] = await Promise.all([
+    adminApi(`/bundles${qs ? `?${qs}` : ''}`),
+    products.length ? Promise.resolve(products) : adminApi('/products'),
+    collections.length ? Promise.resolve(collections) : adminApi('/collections'),
+  ]);
+  bundles = bundlesRes; products = productsRes; collections = collectionsRes;
+  document.getElementById('bundlesBody').innerHTML = bundles.map(bundleRowHTML).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--gray);">Aucun bundle pour le moment.</td></tr>';
 }
 
 document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(window._bundleSearchT); window._bundleSearchT = setTimeout(loadAll, 250); });
@@ -94,6 +102,7 @@ document.getElementById('newBundleBtn').addEventListener('click', () => openBund
 function openBundleModal(bundle) {
   const isEdit = !!bundle;
   const selectedQty = new Map((isEdit ? bundle.items : []).map((it) => [it.productId, it.quantity]));
+  const selectedCollectionIds = new Set((isEdit && bundle.collections ? bundle.collections : []).map((c) => c.id));
   const overlay = document.createElement('div');
   overlay.className = 'admin-modal-overlay';
   overlay.innerHTML = `
@@ -107,6 +116,14 @@ function openBundleModal(bundle) {
         <div class="admin-field"><label>Description</label><textarea name="description" rows="2">${isEdit && bundle.description ? bundle.description : ''}</textarea></div>
         <div class="admin-field"><label>URL image (optionnel — utilisez la page Produits pour uploader puis collez l'URL ici)</label><input name="image" value="${isEdit && bundle.image ? bundle.image : ''}"></div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || bundle.isActive ? 'checked' : ''}> Actif</label>
+        <div class="admin-field">
+          <label>Collections où ce bundle doit apparaître</label>
+          <p class="admin-field-help">Le bundle s'affiche directement dans la grille de produits de chaque collection cochée, avec la même carte qu'un produit normal.</p>
+          <div class="admin-checkbox-grid" id="bundleCollectionsList">
+            ${collections.map((c) => `
+              <label class="admin-checkbox"><input type="checkbox" class="bundle-collection-check" value="${c.id}" ${selectedCollectionIds.has(c.id) ? 'checked' : ''}> ${c.name}</label>`).join('') || '<p class="admin-field-help">Aucune collection disponible.</p>'}
+          </div>
+        </div>
         <div class="admin-field">
           <label>Produits inclus et quantités</label>
           <div id="bundleItemsList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
@@ -135,9 +152,10 @@ function openBundleModal(bundle) {
       quantity: Number(document.querySelector(`.bundle-item-qty[data-for="${el.value}"]`).value) || 1,
     }));
     if (items.length === 0) { toast('Sélectionnez au moins un produit.', 'error'); return; }
+    const collectionIds = Array.from(document.querySelectorAll('.bundle-collection-check:checked')).map((el) => el.value);
     const payload = {
       name: fd.get('name'), price: fd.get('price'), description: fd.get('description') || null,
-      image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', items,
+      image: fd.get('image') || null, isActive: fd.get('isActive') === 'on', items, collectionIds,
     };
     try {
       if (isEdit) await adminApi(`/bundles/${bundle.id}`, { method: 'PUT', body: JSON.stringify(payload) });
