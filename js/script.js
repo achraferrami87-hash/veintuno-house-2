@@ -2332,15 +2332,30 @@ function initRevealAnimations() {
     }
   }
 
+  // Bumped on every call so a slow-resolving fetch for a product the
+  // customer already navigated away from can never overwrite the page with
+  // stale content once a newer navigation has started.
+  let productDetailRenderSeq = 0;
+
   async function renderProductDetail(slug) {
-    const mount = document.getElementById('productDetailVisual').closest('.product-detail__layout');
+    const mySeq = ++productDetailRenderSeq;
+    // Resolved by its own stable id — NOT by finding the child
+    // #productDetailVisual and walking up, which broke on the second visit
+    // ever: productDetailBodyHTML() below renders a fresh .product-detail__visual
+    // div without that id, so it only ever existed in the original static
+    // markup. The next render's getElementById('productDetailVisual') then
+    // returned null, and calling .closest() on it threw — before the mount
+    // was ever cleared, leaving the previous product on screen.
+    const mount = document.getElementById('productDetailLayout');
     let product;
     try {
       product = await getProductBySlug(slug);
     } catch (e) {
+      if (mySeq !== productDetailRenderSeq) return;
       mount.innerHTML = '<p style="padding:60px;text-align:center;">Produit introuvable.</p>';
       return;
     }
+    if (mySeq !== productDetailRenderSeq) return;
     trackPixelEvent('ViewContent', {
       content_ids: [product.slug], content_name: product.name, content_type: 'product',
       value: product.onSale ? product.displayPrice : product.price, currency: 'MAD',
