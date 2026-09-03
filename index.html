@@ -113,6 +113,11 @@ try {
     <div class="hero-slider" id="heroSlider"></div>
   </section>
 
+  <!-- Free shipping threshold banner -->
+  <section class="free-shipping-strip">
+    <p class="free-shipping-strip__text"><span class="free-shipping-strip__mark">✦</span> Livraison gratuite à partir de 199 DH <span class="free-shipping-strip__mark">✦</span></p>
+  </section>
+
   <!-- Dynamic, admin-managed homepage sections -->
   <div id="homepageSections"></div>
 
@@ -324,6 +329,10 @@ try {
           <span>Réduction</span>
           <span id="cartDiscount">0 MAD</span>
         </div>
+        <div class="cart-drawer__subtotal cart-drawer__subtotal--line" id="cartDeliveryRow" hidden>
+          <span>Livraison</span>
+          <span id="cartDeliveryFee">0 MAD</span>
+        </div>
         <div class="cart-drawer__subtotal">
           <span>Total</span>
           <span id="cartTotal">0 MAD</span>
@@ -359,6 +368,10 @@ try {
           <input type="tel" name="phone" required autocomplete="tel" placeholder="06 00 00 00 00" maxlength="10" inputmode="numeric" pattern="[0-9]{10}">
         </label>
         <div id="checkoutError" class="checkout-form__error" hidden></div>
+        <div class="checkout-form__summary" id="checkoutDeliveryRow" hidden>
+          <span>Livraison</span>
+          <span id="checkoutDeliveryFee">0 MAD</span>
+        </div>
         <div class="checkout-form__summary">
           <span>Total à payer à la livraison</span>
           <span id="checkoutSubtotal">0 MAD</span>

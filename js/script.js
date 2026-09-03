@@ -285,9 +285,13 @@ const Cart = (() => {
   const subtotalEl = document.getElementById('cartSubtotal');
   const discountRowEl = document.getElementById('cartDiscountRow');
   const discountEl = document.getElementById('cartDiscount');
+  const deliveryRowEl = document.getElementById('cartDeliveryRow');
+  const deliveryFeeEl = document.getElementById('cartDeliveryFee');
   const totalEl = document.getElementById('cartTotal');
   const checkoutBtn = document.getElementById('cartCheckoutBtn');
   const checkoutSubtotalEl = document.getElementById('checkoutSubtotal');
+  const checkoutDeliveryRowEl = document.getElementById('checkoutDeliveryRow');
+  const checkoutDeliveryFeeEl = document.getElementById('checkoutDeliveryFee');
   const checkoutForm = document.getElementById('checkoutForm');
   const checkoutErrorEl = document.getElementById('checkoutError');
   const checkoutSubmitBtn = document.getElementById('checkoutReviewBtn');
@@ -308,6 +312,20 @@ const Cart = (() => {
   let pendingCustomer = null;
   let clientOrderId = null;
   let isSubmittingOrder = false;
+
+  // Gel Douche individual-unit delivery fee (30 MAD) — this is only a
+  // client-side preview so the customer sees it before submitting; the
+  // server independently recomputes and enforces the real fee at checkout,
+  // never trusting a value sent from here.
+  let gelsDoucheCollectionId = null;
+  (async () => {
+    try {
+      const cols = await api('/collections');
+      const gd = cols.find((c) => c.slug === 'gels-douche');
+      gelsDoucheCollectionId = gd ? gd.id : null;
+      renderAll();
+    } catch (e) { /* ignore — fee preview simply stays 0 until this resolves */ }
+  })();
 
   function newClientOrderId() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -333,8 +351,19 @@ const Cart = (() => {
   function discount() {
     return appliedPromo ? appliedPromo.discount : 0;
   }
+  // Mirrors the server-side rule in server/routes/public.js exactly: 30 MAD
+  // when the cart holds exactly one individually-purchased Gel Douche unit
+  // and no pack at all; 0 otherwise (packs keep their own price untouched).
+  function deliveryFee() {
+    if (!gelsDoucheCollectionId) return 0;
+    if (items.some((i) => i.kind === 'PACK')) return 0;
+    const gelDoucheQty = items
+      .filter((i) => i.kind === 'PRODUCT' && i.collectionId === gelsDoucheCollectionId)
+      .reduce((s, i) => s + i.quantity, 0);
+    return gelDoucheQty === 1 ? 30 : 0;
+  }
   function total() {
-    return Math.max(0, subtotal() - discount());
+    return Math.max(0, subtotal() - discount() + deliveryFee());
   }
 
   function clearPromo() {
@@ -409,6 +438,7 @@ const Cart = (() => {
         uid: 'product-' + product.slug, kind: 'PRODUCT', productSlug: product.slug,
         name: product.name, unitPrice: product.onSale ? product.displayPrice : product.price, quantity: 1,
         detail: product.notes || '', shape: product.shape, color: product.color, images: product.images || [],
+        collectionId: product.collectionId || null,
       });
     }
     clearPromo(); persist(); renderAll();
@@ -442,6 +472,11 @@ const Cart = (() => {
     if (subtotalEl) subtotalEl.textContent = `${subtotal()} MAD`;
     if (discountEl) discountEl.textContent = `-${discount()} MAD`;
     if (discountRowEl) discountRowEl.hidden = discount() <= 0;
+    const fee = deliveryFee();
+    if (deliveryFeeEl) deliveryFeeEl.textContent = `${fee} MAD`;
+    if (deliveryRowEl) deliveryRowEl.hidden = fee <= 0;
+    if (checkoutDeliveryFeeEl) checkoutDeliveryFeeEl.textContent = `${fee} MAD`;
+    if (checkoutDeliveryRowEl) checkoutDeliveryRowEl.hidden = fee <= 0;
     if (totalEl) totalEl.textContent = `${total()} MAD`;
     if (checkoutBtn) checkoutBtn.disabled = items.length === 0;
 

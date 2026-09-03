@@ -656,8 +656,22 @@ router.post('/promo/validate', async (req, res) => {
 });
 
 // ---------- Checkout ----------
+// Gel Douche individual-unit delivery fee: 30 MAD, only when the order
+// contains exactly one Gel Douche bought as a standalone product (not part
+// of a pack) and no pack at all. Computed here — never trusted from the
+// client — from the already-resolved, price-verified cart items.
+async function computeGelDoucheDeliveryFee(resolvedItems) {
+  if (resolvedItems.some((i) => i.kind === 'PACK')) return 0;
+  const gelsDouche = await prisma.collection.findUnique({ where: { slug: 'gels-douche' } });
+  if (!gelsDouche) return 0;
+  const gelDoucheQty = resolvedItems
+    .filter((i) => i.kind === 'PRODUCT' && i.collectionId === gelsDouche.id)
+    .reduce((s, i) => s + i.quantity, 0);
+  return gelDoucheQty === 1 ? 30 : 0;
+}
+
 router.post('/orders', async (req, res) => {
-  const { customer, items, promoCode: promoCodeStr, deliveryFee, clientOrderId } = req.body;
+  const { customer, items, promoCode: promoCodeStr, clientOrderId } = req.body;
 
   if (!customer || !customer.fullName || !customer.address || !customer.city || !customer.phone) {
     return res.status(400).json({ error: 'Informations client incomplètes.' });
@@ -700,7 +714,7 @@ router.post('/orders', async (req, res) => {
     discountAmount = promoResult.discount;
   }
 
-  const fee = Number(deliveryFee) || 0;
+  const fee = await computeGelDoucheDeliveryFee(resolved.items);
   const total = Math.max(0, subtotal - discountAmount + fee);
   const orderNumber = generateOrderNumber();
 
