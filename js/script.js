@@ -514,7 +514,23 @@ const Cart = (() => {
       const distinctImages = Array.isArray(item.images) ? Array.from(new Set(item.images.filter(Boolean))) : [];
       if (item.kind === 'PACK' && distinctImages.length > 1) {
         thumb.classList.add('cart-item__thumb--multi');
-        thumb.innerHTML = distinctImages.map((src) => `<img src="${src}" alt="${item.name}">`).join('');
+        // A real edge-to-edge photo collage (2 side by side / 3 as one tall
+        // plus two stacked / 4 as a 2×2 grid) instead of leftover empty
+        // margins — capped at 4 tiles since the frame is only 56px wide.
+        const photos = distinctImages.slice(0, 4);
+        if (photos.length === 2) {
+          thumb.style.gridTemplateColumns = '1fr 1fr';
+          thumb.style.gridTemplateRows = '1fr';
+        } else {
+          thumb.style.gridTemplateColumns = '1fr 1fr';
+          thumb.style.gridTemplateRows = '1fr 1fr';
+        }
+        thumb.innerHTML = photos.map((src, i) => {
+          let area = '';
+          if (photos.length === 3 && i === 0) area = 'grid-column:1;grid-row:1 / 3;';
+          else if (photos.length === 3) area = `grid-column:2;grid-row:${i};`;
+          return `<img src="${src}" alt="${item.name}" style="${area}">`;
+        }).join('');
       } else {
         thumb.innerHTML = distinctImages[0] ? `<img src="${distinctImages[0]}" alt="${item.name}">` : productVisual(item.shape || 'bottle', item.color || '#C9A227');
       }

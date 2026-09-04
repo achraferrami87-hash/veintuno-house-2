@@ -1164,25 +1164,25 @@ em { font-style: italic; color: var(--gold); }
   flex-shrink: 0;
   background: var(--cream);
   display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  overflow: hidden;
 }
 .cart-item__thumb svg { width: 30px; height: auto; }
 .cart-item__thumb img { width: 100%; height: 100%; object-fit: contain; }
 /* A pack line with more than one distinct fragrance shows every photo as a
-   small tile instead of a single representative image — same 56px width,
-   free to grow a little taller if there are enough fragrances to wrap onto
-   a third row. */
+   collage tile filling the same 56×56 frame edge-to-edge — a real photo
+   grid (2 side by side, 3 as one-large-plus-two-stacked, 4 as a 2×2 grid),
+   never overlapping and never leaving empty margins on the sides. The grid
+   template and each image's placement are set inline per-item in JS since
+   they depend on how many distinct fragrances there are. */
 .cart-item__thumb--multi {
-  flex-wrap: wrap;
-  align-content: flex-start;
+  display: grid;
   gap: 2px;
-  height: auto;
-  min-height: 56px;
-  padding: 2px;
 }
-.cart-item__thumb--multi img, .cart-item__thumb--multi svg {
-  width: 26px; height: 26px;
+.cart-item__thumb--multi img {
+  width: 100%; height: 100%;
   object-fit: cover;
-  flex-shrink: 0;
+  display: block;
 }
 .cart-item__info { flex: 1; }
 .cart-item__info h4 { font-family: var(--serif); font-size: 15px; font-weight: 600; margin-bottom: 4px; }
