@@ -1756,7 +1756,7 @@ function initQuickView() {
     document.body.style.overflow = '';
   }
 
-  async function open(slug) {
+  async function open(slug, hidePackCta) {
     let product;
     try { product = await getProductBySlug(slug); } catch (e) { return; }
     trackPixelEvent('ViewContent', {
@@ -1765,6 +1765,15 @@ function initQuickView() {
     });
     nameEl.textContent = product.name;
     body.innerHTML = productDetailBodyHTML(product, true);
+    // Opened from a Find Your Scent match: this is only a peek at the
+    // fragrance while staying on the quiz results, not a real navigation
+    // point — the "Choisir mon pack"/add-to-cart action doesn't belong
+    // here, only the × to go back to the other matches. Every other Quick
+    // View (from a product card, a fragrance card, etc.) keeps it.
+    if (hidePackCta) {
+      const ctaBlock = body.querySelector('.product-detail__pack-only, .product-detail__actions');
+      if (ctaBlock) ctaBlock.hidden = true;
+    }
     wireProductDetailActions(body, product);
     startVisitorCounter(body.querySelector('.js-visitor-counter'));
     startFlashCountdown(body.querySelector('.js-flash-countdown'));
@@ -1778,7 +1787,7 @@ function initQuickView() {
     const btn = e.target.closest('.js-quick-view');
     if (!btn) return;
     e.preventDefault();
-    open(btn.dataset.slug);
+    open(btn.dataset.slug, btn.dataset.hidePackCta === '1');
   });
 
   closeBtn.addEventListener('click', close);
@@ -2928,7 +2937,7 @@ function initFindYourScent() {
                 <p class="quiz-result-card__match">${r.matchPercent}% Match</p>
                 ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
                 <div class="quiz-result-card__actions">
-                  <button type="button" class="btn btn--outline btn--small js-quick-view" data-slug="${r.product.slug}">Aperçu rapide</button>
+                  <button type="button" class="btn btn--outline btn--small js-quick-view" data-slug="${r.product.slug}" data-hide-pack-cta="1">Aperçu rapide</button>
                   ${chooseActionHTML}
                 </div>
               </div>
