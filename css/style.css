@@ -1178,12 +1178,27 @@ em { font-style: italic; color: var(--gold); }
 .cart-item__thumb--multi {
   display: grid;
   gap: 2px;
+  position: relative;
 }
 .cart-item__thumb--multi img {
   width: 100%; height: 100%;
   object-fit: cover;
   display: block;
 }
+/* The 5th fragrance (once 4 already fill the grid) rides in a small round
+   badge centered over it, rather than being cut off or squeezed in. */
+.cart-item__thumb-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--white);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+}
+.cart-item__thumb-center img { width: 100%; height: 100%; object-fit: cover; display: block; }
+[data-theme="sombre"] .cart-item__thumb-center { border-color: #1b1917; }
 .cart-item__info { flex: 1; }
 .cart-item__info h4 { font-family: var(--serif); font-size: 15px; font-weight: 600; margin-bottom: 4px; }
 .cart-item__info p { font-size: 12px; color: var(--gray); line-height: 1.5; }

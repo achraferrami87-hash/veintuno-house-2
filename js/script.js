@@ -514,23 +514,30 @@ const Cart = (() => {
       const distinctImages = Array.isArray(item.images) ? Array.from(new Set(item.images.filter(Boolean))) : [];
       if (item.kind === 'PACK' && distinctImages.length > 1) {
         thumb.classList.add('cart-item__thumb--multi');
-        // A real edge-to-edge photo collage (2 side by side / 3 as one tall
-        // plus two stacked / 4 as a 2×2 grid) instead of leftover empty
-        // margins — capped at 4 tiles since the frame is only 56px wide.
-        const photos = distinctImages.slice(0, 4);
-        if (photos.length === 2) {
+        // A real edge-to-edge photo collage: 2 side by side / 3 as one tall
+        // plus two stacked / 4 as an even 2×2 grid (top pair and bottom pair
+        // get the exact same area) / a 5th fragrance rides in a small
+        // circular badge centered over the 2×2 grid instead of being cut.
+        const photos = distinctImages.slice(0, 5);
+        const fifthPhoto = photos.length >= 5 ? photos[4] : null;
+        const gridPhotos = fifthPhoto ? photos.slice(0, 4) : photos;
+        if (gridPhotos.length === 2) {
           thumb.style.gridTemplateColumns = '1fr 1fr';
           thumb.style.gridTemplateRows = '1fr';
         } else {
           thumb.style.gridTemplateColumns = '1fr 1fr';
           thumb.style.gridTemplateRows = '1fr 1fr';
         }
-        thumb.innerHTML = photos.map((src, i) => {
+        thumb.innerHTML = gridPhotos.map((src, i) => {
           let area = '';
-          if (photos.length === 3 && i === 0) area = 'grid-column:1;grid-row:1 / 3;';
-          else if (photos.length === 3) area = `grid-column:2;grid-row:${i};`;
+          if (gridPhotos.length === 3 && i === 0) area = 'grid-column:1;grid-row:1 / 3;';
+          else if (gridPhotos.length === 3) area = `grid-column:2;grid-row:${i};`;
+          else if (gridPhotos.length === 4) area = `grid-column:${(i % 2) + 1};grid-row:${Math.floor(i / 2) + 1};`;
           return `<img src="${src}" alt="${item.name}" style="${area}">`;
         }).join('');
+        if (fifthPhoto) {
+          thumb.insertAdjacentHTML('beforeend', `<span class="cart-item__thumb-center"><img src="${fifthPhoto}" alt="${item.name}"></span>`);
+        }
       } else {
         thumb.innerHTML = distinctImages[0] ? `<img src="${distinctImages[0]}" alt="${item.name}">` : productVisual(item.shape || 'bottle', item.color || '#C9A227');
       }
