@@ -2928,7 +2928,7 @@ function initFindYourScent() {
                 <p class="quiz-result-card__match">${r.matchPercent}% Match</p>
                 ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
                 <div class="quiz-result-card__actions">
-                  <a href="#product/${r.product.slug}" class="btn btn--outline btn--small">Découvrir ce parfum</a>
+                  <button type="button" class="btn btn--outline btn--small js-quick-view" data-slug="${r.product.slug}">Aperçu rapide</button>
                   ${chooseActionHTML}
                 </div>
               </div>
