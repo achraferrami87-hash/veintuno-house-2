@@ -507,7 +507,17 @@ const Cart = (() => {
       row.className = 'cart-item';
       const thumb = document.createElement('div');
       thumb.className = 'cart-item__thumb';
-      thumb.innerHTML = (item.images && item.images[0]) ? `<img src="${item.images[0]}" alt="${item.name}">` : productVisual(item.shape || 'bottle', item.color || '#C9A227');
+      // A pack with several different fragrances shows every one of their
+      // photos (deduplicated — a fragrance picked ×2 only needs one tile),
+      // not just the first; a single-fragrance pack, or any other item,
+      // keeps the original one-photo thumbnail untouched.
+      const distinctImages = Array.isArray(item.images) ? Array.from(new Set(item.images.filter(Boolean))) : [];
+      if (item.kind === 'PACK' && distinctImages.length > 1) {
+        thumb.classList.add('cart-item__thumb--multi');
+        thumb.innerHTML = distinctImages.map((src) => `<img src="${src}" alt="${item.name}">`).join('');
+      } else {
+        thumb.innerHTML = distinctImages[0] ? `<img src="${distinctImages[0]}" alt="${item.name}">` : productVisual(item.shape || 'bottle', item.color || '#C9A227');
+      }
       const info = document.createElement('div');
       info.className = 'cart-item__info';
       const h4 = document.createElement('h4'); h4.textContent = item.name;

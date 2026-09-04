@@ -1167,6 +1167,23 @@ em { font-style: italic; color: var(--gold); }
 }
 .cart-item__thumb svg { width: 30px; height: auto; }
 .cart-item__thumb img { width: 100%; height: 100%; object-fit: contain; }
+/* A pack line with more than one distinct fragrance shows every photo as a
+   small tile instead of a single representative image — same 56px width,
+   free to grow a little taller if there are enough fragrances to wrap onto
+   a third row. */
+.cart-item__thumb--multi {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 2px;
+  height: auto;
+  min-height: 56px;
+  padding: 2px;
+}
+.cart-item__thumb--multi img, .cart-item__thumb--multi svg {
+  width: 26px; height: 26px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .cart-item__info { flex: 1; }
 .cart-item__info h4 { font-family: var(--serif); font-size: 15px; font-weight: 600; margin-bottom: 4px; }
 .cart-item__info p { font-size: 12px; color: var(--gray); line-height: 1.5; }
