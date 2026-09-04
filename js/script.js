@@ -179,6 +179,13 @@ const composeDraftState = {
   free: new Map(), // configId -> [{slug, name, price, collection}]
 };
 
+// Set by renderComposePack while a pack composition is on screen, cleared by
+// the router the moment the customer navigates anywhere else. Lets Find Your
+// Scent — opened as an overlay on top of the composer — add its recommended
+// match straight into the pack currently being built, instead of only ever
+// linking back to "choose a pack" like it did before a pack was picked.
+let activePackComposer = null; // { packId, pack, quantities, changeQty } | null
+
 function stripAccents(str) {
   return str.normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
@@ -389,10 +396,16 @@ const Cart = (() => {
     return Array.from(counts.entries()).map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(', ');
   }
 
-  function addPack(packId, packName, packPrice, componentSlugs, componentNames) {
+  function addPack(packId, packName, packPrice, componentSlugs, componentNames, componentImages) {
+    // Reuses the exact same `images` field/thumbnail rendering already used
+    // for a plain product line — the cart drawer only ever shows the first
+    // image of an item, so a pack now shows a real photo of one of its
+    // chosen fragrances instead of the generic bottle icon, with zero new
+    // rendering code needed.
+    const images = Array.isArray(componentImages) ? componentImages.filter(Boolean) : [];
     items.push({
       uid: 'pack-' + Date.now(), kind: 'PACK', packId, name: packName,
-      unitPrice: Number(packPrice), quantity: 1, componentSlugs,
+      unitPrice: Number(packPrice), quantity: 1, componentSlugs, images,
       detail: `${componentSlugs.length} produits — ${summarizeNames(componentNames)}`,
     });
     clearPromo(); persist(); renderAll();
@@ -1188,6 +1201,11 @@ async function renderComposePack(container, packId) {
     <p class="admin-field-help" style="margin-top:-12px;margin-bottom:20px;">Vous pouvez sélectionner plusieurs fois le même parfum.</p>
     <div id="composePackProgress"></div>
     ${fragranceToolbarHTML('composePack')}
+    <button type="button" class="compose-find-scent-banner js-find-scent-open">
+      <span class="compose-find-scent-banner__icon">✦</span>
+      <span class="compose-find-scent-banner__text"><strong>Indécis(e) ?</strong> Laissez Find Your Scent vous recommander un parfum — entièrement facultatif, vous pouvez aussi choisir vous-même ci-dessous.</span>
+      <span class="compose-find-scent-banner__cta">FIND YOUR SCENT →</span>
+    </button>
     <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
     <div class="compose-sticky-bar" id="composePackBar">
       <div class="pack-modal__recap" id="composePackRecap"><span class="pack-modal__recap-empty">Aucun parfum sélectionné</span></div>
@@ -1229,11 +1247,14 @@ async function renderComposePack(container, packId) {
         const slug = card.dataset.slug;
         const qty = quantities.get(slug) || 0;
         if (qty === 0) return;
+        const product = pack.eligibleProducts.find((p) => p.slug === slug);
         const chip = document.createElement('span'); chip.className = 'pack-modal__chip';
+        const thumb = document.createElement('span'); thumb.className = 'pack-modal__chip-thumb';
+        thumb.innerHTML = product ? productMediaHTML(product) : productVisual('bottle', '#C9A227');
         const label = document.createElement('span'); label.textContent = qty > 1 ? `${card.dataset.name} ×${qty}` : card.dataset.name;
         const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.textContent = '×';
         removeBtn.addEventListener('click', () => setQty(slug, 0));
-        chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
+        chip.appendChild(thumb); chip.appendChild(label); chip.appendChild(removeBtn); recap.appendChild(chip);
       });
     }
     cta.disabled = total !== pack.size;
@@ -1252,10 +1273,23 @@ async function renderComposePack(container, packId) {
     if (delta > 0 && totalSelected() >= pack.size) {
       card.classList.add('is-shaking');
       setTimeout(() => card.classList.remove('is-shaking'), 400);
-      return;
+      return false;
     }
     setQty(slug, Math.max(0, current + delta));
+    return true;
   }
+
+  // Briefly highlights a card so the customer clearly sees which fragrance
+  // Find Your Scent just registered as one of their real pack choices.
+  function highlightCard(slug) {
+    const card = cards.find((c) => c.dataset.slug === slug);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('is-just-added');
+    setTimeout(() => card.classList.remove('is-just-added'), 1400);
+  }
+
+  activePackComposer = { packId, pack, quantities, changeQty, highlightCard };
 
   grid.addEventListener('click', (e) => {
     const plusBtn = e.target.closest('.qty-plus');
@@ -1268,12 +1302,16 @@ async function renderComposePack(container, packId) {
     if (cta.disabled) return;
     const slugs = [];
     const names = [];
+    const images = [];
     cards.forEach((card) => {
       const slug = card.dataset.slug;
       const qty = quantities.get(slug) || 0;
-      for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); }
+      if (qty === 0) return;
+      const product = pack.eligibleProducts.find((p) => p.slug === slug);
+      const image = product && Array.isArray(product.images) ? product.images[0] : null;
+      for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); images.push(image); }
     });
-    Cart.addPack(pack.id, pack.name, pack.price, slugs, names);
+    Cart.addPack(pack.id, pack.name, pack.price, slugs, names, images);
     composeDraftState.packs.delete(packId);
     lastComposeAddedSummary = { name: pack.name, itemNames: names };
     location.hash = '#compose/added';
@@ -2652,6 +2690,11 @@ function initRevealAnimations() {
     }
     allViews.forEach((v) => { if (v) v.hidden = true; });
 
+    // Find Your Scent can only ever add its match into a pack that is
+    // actually on screen right now — dropped the instant the customer
+    // navigates anywhere else, and set fresh again by renderComposePack.
+    if (!hash.startsWith('compose/pack/')) activePackComposer = null;
+
     if (hash === 'collections') {
       viewCollections.hidden = false;
       window.scrollTo(0, 0);
@@ -2762,8 +2805,7 @@ function initFindYourScent() {
   const backdrop = document.getElementById('quizBackdrop');
   const closeBtn = document.getElementById('quizClose');
   const body = document.getElementById('quizBody');
-  const openBtn = document.getElementById('findScentBtn');
-  if (!modal || !openBtn) return;
+  if (!modal) return;
 
   let questions = [];
   const chosen = new Map(); // questionId -> answerId
@@ -2826,12 +2868,24 @@ function initFindYourScent() {
       wireResultLink();
       return;
     }
+    // While a pack is actively being composed (Find Your Scent opened from
+    // the "FIND YOUR SCENT" banner inside that composer), a matched perfume
+    // that's actually eligible for that pack gets a direct "add to my pack"
+    // action instead of the normal "go choose a pack" link — it's registered
+    // as a real pack choice immediately, no extra navigation needed since
+    // the composer is already open underneath this modal.
     body.innerHTML = `
       <div class="quiz-results">
         <p class="section__eyebrow">Your Scent Match</p>
         <h3>Vos parfums recommandés</h3>
         <div class="quiz-results__list">
-          ${results.map((r, i) => `
+          ${results.map((r, i) => {
+            const eligibleForActivePack = activePackComposer
+              && activePackComposer.pack.eligibleProducts.some((p) => p.slug === r.product.slug);
+            const chooseActionHTML = eligibleForActivePack
+              ? `<button type="button" class="btn btn--gold btn--small js-quiz-add-to-pack" data-slug="${r.product.slug}">Ajouter à mon pack →</button>`
+              : `<a href="#collection/${r.product.collection ? r.product.collection.slug : 'parfums'}" class="btn btn--gold btn--small js-quiz-add-to-cart">Choisir mon pack</a>`;
+            return `
             <div class="quiz-result-card">
               <span class="quiz-result-card__rank">${i + 1}</span>
               <div class="quiz-result-card__media">${productMediaHTML(r.product)}</div>
@@ -2842,16 +2896,31 @@ function initFindYourScent() {
                 ${r.matchedCharacteristics.length ? `<p class="quiz-result-card__why">Basé sur vos réponses, vous préférez des senteurs ${r.matchedCharacteristics.join(', ').toLowerCase()}.</p>` : ''}
                 <div class="quiz-result-card__actions">
                   <a href="#product/${r.product.slug}" class="btn btn--outline btn--small">Découvrir ce parfum</a>
-                  <a href="#collection/${r.product.collection ? r.product.collection.slug : 'parfums'}" class="btn btn--gold btn--small js-quiz-add-to-cart">Choisir mon pack</a>
+                  ${chooseActionHTML}
                 </div>
               </div>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
         </div>
-        <p class="quiz-results__note">Ces parfums sont disponibles exclusivement au sein de nos packs — le bouton "Choisir mon pack" vous amène directement au choix de pack incluant ce parfum.</p>
+        <p class="quiz-results__note">${activePackComposer
+          ? 'Cliquez sur "Ajouter à mon pack" pour enregistrer directement ce parfum comme l\'un de vos choix — vous pourrez ensuite compléter le reste normalement.'
+          : 'Ces parfums sont disponibles exclusivement au sein de nos packs — le bouton "Choisir mon pack" vous amène directement au choix de pack incluant ce parfum.'}</p>
       </div>`;
     wireResultLink();
     body.querySelectorAll('.js-quiz-add-to-cart, .quiz-result-card__actions a').forEach((link) => {
       link.addEventListener('click', () => close());
+    });
+    body.querySelectorAll('.js-quiz-add-to-pack').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const slug = btn.dataset.slug;
+        const composer = activePackComposer;
+        close();
+        if (!composer) return;
+        setTimeout(() => {
+          const added = composer.changeQty(slug, 1);
+          if (added) composer.highlightCard(slug);
+        }, 200);
+      });
     });
   }
 
@@ -2870,7 +2939,13 @@ function initFindYourScent() {
     renderQuestion();
   }
 
-  openBtn.addEventListener('click', open);
+  // Delegated (not a direct listener on one static button) so the quiz also
+  // opens from the "FIND YOUR SCENT" banner rendered dynamically inside the
+  // pack composer, in addition to the original entry point on the Parfums
+  // collection page — both share the same modal/flow, nothing duplicated.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#findScentBtn, .js-find-scent-open')) open();
+  });
   closeBtn.addEventListener('click', close);
   backdrop.addEventListener('click', close);
   document.addEventListener('keydown', (e) => {
