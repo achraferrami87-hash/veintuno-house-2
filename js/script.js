@@ -2430,11 +2430,17 @@ function initRevealAnimations() {
   let currentCollectionBundles = [];
 
   function applyGenderFilter(gender) {
-    const filtered = gender
+    let filtered = gender
       ? currentCollectionProducts.filter((p) => Array.isArray(p.genders) && p.genders.includes(gender))
       : currentCollectionProducts;
+    // Parfums also has its own search box (shown alongside the gender
+    // chips, not instead of them) — combine both instead of one replacing
+    // the other.
+    const q = stripAccents((collectionDetailSearch ? collectionDetailSearch.value : '').trim().toLowerCase());
+    if (q) filtered = filtered.filter((p) => matchesByWordPrefix(stripAccents(p.name.toLowerCase()), q));
     const bundlesHTML = gender ? '' : currentCollectionBundles.map(bundleCardHTML).join('');
     detailGrid.innerHTML = filtered.map(productCardHTML).join('') + bundlesHTML;
+    if (collectionDetailEmptyMsg) collectionDetailEmptyMsg.hidden = filtered.length > 0;
     initRevealAnimations();
   }
 
@@ -2455,6 +2461,12 @@ function initRevealAnimations() {
   const collectionDetailCategoryFilter = document.getElementById('collectionDetailCategoryFilter');
   const collectionDetailEmptyMsg = document.getElementById('collectionDetailEmptyMsg');
   let collectionDetailCategory = '';
+  // Parfums reuses this same search box alongside its own Homme/Femme/
+  // Unisexe chips (gender-based filtering); every other collection uses it
+  // alongside the admin-defined "Options du filtre" chips instead — the
+  // search input itself is shared, so this just says which apply-function
+  // it should drive.
+  let collectionDetailMode = 'category';
 
   function applyCollectionDetailFilter() {
     const q = stripAccents((collectionDetailSearch ? collectionDetailSearch.value : '').trim().toLowerCase());
@@ -2478,7 +2490,14 @@ function initRevealAnimations() {
   }
 
   if (collectionDetailSearch) {
-    collectionDetailSearch.addEventListener('input', applyCollectionDetailFilter);
+    collectionDetailSearch.addEventListener('input', () => {
+      if (collectionDetailMode === 'gender') {
+        const activeChip = genderFilter.querySelector('.gender-filter__chip.is-active');
+        applyGenderFilter(activeChip ? activeChip.dataset.gender : '');
+      } else {
+        applyCollectionDetailFilter();
+      }
+    });
   }
   if (collectionDetailCategoryFilter) {
     collectionDetailCategoryFilter.addEventListener('click', (e) => {
@@ -2605,27 +2624,26 @@ function initRevealAnimations() {
 
     currentCollectionProducts = data.products;
     currentCollectionBundles = data.bundles || [];
-    if (packOnly) {
+    if (packOnly || slug === 'parfums') {
       // Perfumes in a pack-only collection can never be bought individually
       // (each card below still shows "En pack uniquement", never an add-to-
       // cart button — productCardHTML already handles that), but the
-      // customer can still browse them without picking a pack first: the
-      // notice + pack CTAs above stay exactly as they were, this just also
-      // shows the actual perfumes right below instead of nothing.
-      if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
-      if (findScentCta) findScentCta.hidden = false;
-      if (packOnlyNotice) packOnlyNotice.hidden = false;
-      genderFilter.hidden = false;
-      genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
-      applyGenderFilter('');
-    } else if (slug === 'parfums') {
-      if (findScentCta) findScentCta.hidden = true;
-      if (packOnlyNotice) packOnlyNotice.hidden = true;
-      if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
+      // customer can still browse AND search them without picking a pack
+      // first: the notice + pack CTAs above stay exactly as they were, the
+      // gender chips and the search box are both shown side by side, and
+      // typing narrows down whichever gender is currently selected.
+      collectionDetailMode = 'gender';
+      if (findScentCta) findScentCta.hidden = !packOnly;
+      if (packOnlyNotice) packOnlyNotice.hidden = !packOnly;
+      if (collectionDetailSearch) collectionDetailSearch.value = '';
+      if (collectionDetailSearchBox) collectionDetailSearchBox.hidden = false;
+      if (collectionDetailCategoryFilter) collectionDetailCategoryFilter.hidden = true;
+      if (collectionDetailToolbar) collectionDetailToolbar.hidden = false;
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');
     } else {
+      collectionDetailMode = 'category';
       if (findScentCta) findScentCta.hidden = true;
       if (packOnlyNotice) packOnlyNotice.hidden = true;
       genderFilter.hidden = true;
