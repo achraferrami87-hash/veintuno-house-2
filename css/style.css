@@ -2301,6 +2301,14 @@ a { transition: color 0.2s ease; }
   flex-wrap: wrap;
   margin-bottom: 28px;
 }
+/* Same specificity as the bare "[hidden]" UA-stylesheet rule, but author
+   styles always win ties over user-agent defaults regardless of source
+   order — so setting .hidden = true in JS on either element did nothing
+   visually until this override existed (the search bar and the whole
+   toolbar kept showing as flex on the Parfums page even though the code
+   correctly hid them). */
+.compose-toolbar[hidden] { display: none; }
+.compose-search[hidden] { display: none; }
 .compose-search {
   display: flex;
   align-items: center;

@@ -92,7 +92,11 @@ router.get('/collections/:slug', async (req, res) => {
 
   res.json({
     collection,
-    products: products.map(parseImages),
+    // productCardHTML (frontend) reads product.collection.packOnly to decide
+    // whether to show "Ajouter au panier" or "En pack uniquement" — attach
+    // the collection we already fetched instead of an extra join, since
+    // every product here belongs to it by definition.
+    products: products.map((p) => parseImages({ ...p, collection })),
     packs,
     bundles: bundles.map((b) => ({
       id: b.id, slug: b.slug, name: b.name, description: b.description,

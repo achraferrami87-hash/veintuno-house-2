@@ -2418,6 +2418,7 @@ function initRevealAnimations() {
   const detailPacks = document.getElementById('collectionDetailPacks');
   const genderFilter = document.getElementById('genderFilter');
   const findScentCta = document.getElementById('findScentCta');
+  const packOnlyNotice = document.getElementById('packOnlyNotice');
 
   if (!viewHome || !viewCollections || !viewDetail) return;
 
@@ -2605,25 +2606,28 @@ function initRevealAnimations() {
     currentCollectionProducts = data.products;
     currentCollectionBundles = data.bundles || [];
     if (packOnly) {
-      // Perfumes in a pack-only collection are never individually addable —
-      // browsing lands on the pack list above; picking a pack is what reveals
-      // "Now Choose Your Scents" (the existing composer flow) below.
-      genderFilter.hidden = true;
+      // Perfumes in a pack-only collection can never be bought individually
+      // (each card below still shows "En pack uniquement", never an add-to-
+      // cart button — productCardHTML already handles that), but the
+      // customer can still browse them without picking a pack first: the
+      // notice + pack CTAs above stay exactly as they were, this just also
+      // shows the actual perfumes right below instead of nothing.
       if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
       if (findScentCta) findScentCta.hidden = false;
-      detailGrid.innerHTML = `
-        <div class="pack-only-notice">
-          <p>Ces parfums sont disponibles exclusivement au sein de nos packs.</p>
-          <p>Choisissez votre pack ci-dessus, puis composez votre sélection de parfums.</p>
-        </div>`;
+      if (packOnlyNotice) packOnlyNotice.hidden = false;
+      genderFilter.hidden = false;
+      genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
+      applyGenderFilter('');
     } else if (slug === 'parfums') {
       if (findScentCta) findScentCta.hidden = true;
+      if (packOnlyNotice) packOnlyNotice.hidden = true;
       if (collectionDetailToolbar) collectionDetailToolbar.hidden = true;
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');
     } else {
       if (findScentCta) findScentCta.hidden = true;
+      if (packOnlyNotice) packOnlyNotice.hidden = true;
       genderFilter.hidden = true;
       collectionDetailCategory = '';
       if (collectionDetailSearch) collectionDetailSearch.value = '';
