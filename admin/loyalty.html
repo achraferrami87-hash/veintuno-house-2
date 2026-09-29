@@ -23,12 +23,16 @@
       <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:14px;">Règle de calcul des points</h2>
       <form class="admin-form" id="settingsForm">
         <div class="admin-form__row">
-          <div class="admin-field"><label>Montant (MAD) pour 1 point</label><input type="number" step="0.01" name="amountPerPoint" required></div>
-          <div class="admin-field" style="justify-content:flex-end;">
-            <label class="admin-checkbox" style="margin-top:24px;"><input type="checkbox" name="isActive"> Programme actif</label>
-          </div>
+          <div class="admin-field"><label>Parfums + Gels Douche — MAD pour 1 point</label><input type="number" step="0.01" name="amountPerPoint" required></div>
+          <div class="admin-field"><label>Cosmétiques + Suppléments — MAD pour 1 point</label><input type="number" step="0.01" name="amountPerPointSecondary" required></div>
         </div>
-        <p class="admin-field-help">Ex. 199 MAD = 1 point → une commande de 398 MAD rapporte 2 points, 249 MAD rapporte environ 1.25 point.</p>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive"> Programme actif</label>
+        <p class="admin-field-help">Ex. 199 MAD = 1 point sur les Parfums/Gels Douche, 299 MAD = 1 point sur les Cosmétiques/Suppléments. Une commande qui mélange plusieurs catégories cumule les points de chacune séparément.</p>
+        <div class="admin-field">
+          <label>Explication affichée sur la page Fidélité du site</label>
+          <textarea name="pointsExplanation" rows="4" placeholder="Laissez vide pour garder le texte par défaut du site."></textarea>
+          <p class="admin-field-help">Optionnel — si vide, le site garde son texte générique actuel.</p>
+        </div>
         <div class="admin-modal__actions" style="justify-content:flex-start;"><button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button></div>
       </form>
     </div>
@@ -91,13 +95,23 @@ async function loadSettings() {
   const settings = await adminApi('/loyalty/settings');
   const form = document.getElementById('settingsForm');
   form.amountPerPoint.value = settings.amountPerPoint;
+  form.amountPerPointSecondary.value = settings.amountPerPointSecondary;
   form.isActive.checked = settings.isActive;
+  form.pointsExplanation.value = settings.pointsExplanation || '';
 }
 document.getElementById('settingsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
   try {
-    await adminApi('/loyalty/settings', { method: 'PUT', body: JSON.stringify({ amountPerPoint: fd.get('amountPerPoint'), isActive: fd.get('isActive') === 'on' }) });
+    await adminApi('/loyalty/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        amountPerPoint: fd.get('amountPerPoint'),
+        amountPerPointSecondary: fd.get('amountPerPointSecondary'),
+        isActive: fd.get('isActive') === 'on',
+        pointsExplanation: fd.get('pointsExplanation') || null,
+      }),
+    });
     toast('Règle de calcul enregistrée.');
   } catch (err) { toast(err.message, 'error'); }
 });

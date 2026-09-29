@@ -80,6 +80,10 @@ model Product {
   filterOptionIds   String   @default("[]") // JSON array of CollectionFilterOption ids this product is tagged with (its own collection's custom filter)
   volume            String?  @default("50ML")
   price             Float
+  // Admin-entered cost basis per unit, used only to compute Profit on an
+  // order once it's Delivered — never shown to customers, never affects
+  // the selling price.
+  costPrice         Float?
   stock             Int      @default(0)
   lowStockThreshold Int      @default(5)
   images            String   @default("[]") // JSON array of URLs
@@ -328,6 +332,13 @@ model Order {
   deliveryFee    Float    @default(0)
   total          Float
   status         String   @default("PENDING") // PENDING|CONFIRMED|PREPARING|SHIPPED|DELIVERED|CANCELLED
+  // Frozen the moment this order first transitions to DELIVERED (revenue
+  // minus each item's product cost basis) — never recomputed on a later
+  // save of the same status, and never counted before delivery. Stays null
+  // until then. "Accumulated profit" is simply the live sum of this column
+  // across every order currently DELIVERED, so an order that's later
+  // cancelled naturally drops out of that total without a manual reversal.
+  profit         Float?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -420,6 +431,22 @@ model HomepageSection {
   updatedAt DateTime @updatedAt
 }
 
+// Homepage video showcase — admin-managed (add/remove/reorder), rendered as
+// its own section right after the existing dynamic homepage sections.
+// Kept as its own model (mirroring HeroSlide) rather than another
+// HomepageSection JSON blob, so the admin gets a real add/remove/reorder
+// list UI with file upload instead of hand-edited JSON.
+model HomepageVideo {
+  id          String   @id @default(cuid())
+  title       String?
+  videoUrl    String
+  posterImage String?
+  position    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // ===========================
 // NAVBAR (admin-managed static links; the "Collections" dropdown
 // itself is always derived live from the Collection table, not stored here)
@@ -439,8 +466,16 @@ model NavMenuItem {
 // ===========================
 model LoyaltySettings {
   id             String   @id @default(cuid())
-  amountPerPoint Float    @default(199) // orderTotal / amountPerPoint = points earned
+  amountPerPoint Float    @default(199) // orderTotal / amountPerPoint = points earned — Perfumes + Gel Douche
+  // Cosmetics + Supplements earn at their own, separate rate — never mixed
+  // with amountPerPoint above. An order spanning both categories earns
+  // points from each portion of its revenue at its own rate.
+  amountPerPointSecondary Float @default(299)
   isActive       Boolean  @default(true)
+  // Admin-editable "how points work" text shown on the public Fidélité page.
+  // Null/empty falls back to the site's original generic wording — this
+  // field only overrides it once an admin actually fills it in.
+  pointsExplanation String? @db.Text
   updatedAt      DateTime @updatedAt
 }
 

@@ -6,6 +6,89 @@ const router = express.Router();
 
 const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
+// Loyalty rate categories — kept in sync with the two rates on
+// LoyaltySettings (amountPerPoint = Parfums + Gels Douche, amountPerPointSecondary
+// = Cosmétiques + Suppléments). Any collection not in the secondary list
+// (including a future new one) safely falls back to the primary rate.
+const SECONDARY_RATE_SLUGS = ['cosmetics', 'supplements'];
+function rateGroupForSlug(slug) {
+  return SECONDARY_RATE_SLUGS.includes(slug) ? 'secondary' : 'primary';
+}
+
+const ORDER_ECONOMICS_INCLUDE = {
+  items: {
+    include: {
+      product: { include: { collection: true } },
+      pack: { include: { collection: true } },
+      components: { include: { product: { include: { collection: true } } } },
+    },
+  },
+};
+
+// Splits an order's revenue by loyalty-rate category and totals its cost of
+// goods (for Profit) — shared by the status-update route (which freezes
+// these numbers the moment an order first becomes DELIVERED) and the order
+// preview endpoint (which shows a live, non-final estimate at any status).
+function computeOrderEconomics(items) {
+  let primaryRevenue = 0;
+  let secondaryRevenue = 0;
+  let totalCost = 0;
+
+  items.forEach((item) => {
+    const lineRevenue = item.unitPrice * item.quantity;
+
+    if (item.kind === 'PRODUCT' && item.product) {
+      const group = rateGroupForSlug(item.product.collection ? item.product.collection.slug : null);
+      if (group === 'secondary') secondaryRevenue += lineRevenue; else primaryRevenue += lineRevenue;
+      if (item.product.costPrice != null) totalCost += item.product.costPrice * item.quantity;
+      return;
+    }
+
+    if ((item.kind === 'PACK' || item.kind === 'FREE_PACK') && (item.components || []).length) {
+      // Each stored component row already represents exactly one chosen
+      // unit (repeats create repeat rows), so no extra multiplier here.
+      const group = item.kind === 'PACK' && item.pack
+        ? rateGroupForSlug(item.pack.collection ? item.pack.collection.slug : null)
+        : null; // FREE_PACK has no single collection — resolve per component below
+      item.components.forEach((comp) => {
+        const compGroup = group || rateGroupForSlug(comp.product && comp.product.collection ? comp.product.collection.slug : null);
+        const share = lineRevenue / item.components.length;
+        if (compGroup === 'secondary') secondaryRevenue += share; else primaryRevenue += share;
+        if (comp.product && comp.product.costPrice != null) totalCost += comp.product.costPrice;
+      });
+      return;
+    }
+
+    if (item.kind === 'BUNDLE' && (item.components || []).length) {
+      // A Bundle's stored components are its fixed recipe (one row per
+      // distinct product, not per unit), so the line's own quantity still
+      // needs applying per component here.
+      item.components.forEach((comp) => {
+        const compGroup = rateGroupForSlug(comp.product && comp.product.collection ? comp.product.collection.slug : null);
+        const share = lineRevenue / item.components.length;
+        if (compGroup === 'secondary') secondaryRevenue += share; else primaryRevenue += share;
+        if (comp.product && comp.product.costPrice != null) totalCost += comp.product.costPrice * item.quantity;
+      });
+      return;
+    }
+
+    // No product/collection data available at all (shouldn't normally
+    // happen) — count the revenue so totals still balance, at the primary
+    // rate, with no cost data to add.
+    primaryRevenue += lineRevenue;
+  });
+
+  return { primaryRevenue, secondaryRevenue, totalCost, totalRevenue: primaryRevenue + secondaryRevenue };
+}
+
+async function computeLoyaltyPoints(primaryRevenue, secondaryRevenue) {
+  const settings = await prisma.loyaltySettings.findFirst();
+  if (!settings || !settings.isActive) return null;
+  const primaryPoints = settings.amountPerPoint ? primaryRevenue / settings.amountPerPoint : 0;
+  const secondaryPoints = settings.amountPerPointSecondary ? secondaryRevenue / settings.amountPerPointSecondary : 0;
+  return Math.round((primaryPoints + secondaryPoints) * 100) / 100;
+}
+
 function buildOrdersWhere(query) {
   const where = {};
   if (query.status) where.status = query.status;
@@ -107,14 +190,17 @@ router.get('/export', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
-    include: {
-      items: { include: { components: true, product: true, pack: true } },
-      promoCode: true,
-      customer: true,
-    },
+    include: { ...ORDER_ECONOMICS_INCLUDE, promoCode: true, customer: true },
   });
   if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
-  res.json(order);
+  // Profit is only ever real/final once the order is Delivered (order.profit,
+  // frozen at that moment) — before that, this is just a live, non-final
+  // preview so the admin can see what it would be.
+  const { totalCost } = computeOrderEconomics(order.items);
+  // Net of any discount given (real revenue foregone), never touching
+  // delivery fee — that's a pass-through cost, not margin on goods sold.
+  const estimatedProfit = Math.round((order.subtotal - order.discountAmount - totalCost) * 100) / 100;
+  res.json({ ...order, estimatedProfit });
 });
 
 router.put('/:id/status', async (req, res) => {
@@ -124,23 +210,32 @@ router.put('/:id/status', async (req, res) => {
   const existing = await prisma.order.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Commande introuvable.' });
 
-  const order = await prisma.order.update({ where: { id: req.params.id }, data: { status } });
+  // Loyalty points AND profit are only ever computed once, the moment an
+  // order actually transitions into Delivered — never at checkout, never
+  // recomputed on a later save of the same status (this `if` only matches a
+  // real status change, so re-saving DELIVERED→DELIVERED does nothing here).
+  let statusUpdateData = { status };
+  if (existing.status !== 'DELIVERED' && status === 'DELIVERED') {
+    const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: ORDER_ECONOMICS_INCLUDE });
+    const { primaryRevenue, secondaryRevenue, totalCost } = computeOrderEconomics(full.items);
+    statusUpdateData.profit = Math.round((full.subtotal - full.discountAmount - totalCost) * 100) / 100;
 
-  // Loyalty points are only ever credited once an order is actually Delivered,
-  // never at checkout — and clawed back if a delivered order later gets cancelled.
-  if (existing.status !== 'DELIVERED' && status === 'DELIVERED' && order.customerId) {
-    const alreadyCredited = await prisma.loyaltyLedger.findFirst({ where: { orderId: order.id, type: 'EARNED' } });
-    if (!alreadyCredited) {
-      const settings = await prisma.loyaltySettings.findFirst();
-      const amountPerPoint = settings && settings.isActive ? settings.amountPerPoint : null;
-      if (amountPerPoint) {
-        const points = Math.round((order.total / amountPerPoint) * 100) / 100;
-        await prisma.loyaltyLedger.create({
-          data: { customerId: order.customerId, type: 'EARNED', points, note: `Commande ${order.orderNumber}`, orderId: order.id },
-        });
+    if (full.customerId) {
+      const alreadyCredited = await prisma.loyaltyLedger.findFirst({ where: { orderId: full.id, type: 'EARNED' } });
+      if (!alreadyCredited) {
+        const points = await computeLoyaltyPoints(primaryRevenue, secondaryRevenue);
+        if (points) {
+          await prisma.loyaltyLedger.create({
+            data: { customerId: full.customerId, type: 'EARNED', points, note: `Commande ${full.orderNumber}`, orderId: full.id },
+          });
+        }
       }
     }
-  } else if (existing.status === 'DELIVERED' && status === 'CANCELLED') {
+  }
+
+  const order = await prisma.order.update({ where: { id: req.params.id }, data: statusUpdateData });
+
+  if (existing.status === 'DELIVERED' && status === 'CANCELLED') {
     const earned = await prisma.loyaltyLedger.findFirst({ where: { orderId: order.id, type: 'EARNED' } });
     if (earned) {
       const alreadyReversed = await prisma.loyaltyLedger.findFirst({ where: { reversesEntryId: earned.id } });
@@ -153,6 +248,9 @@ router.put('/:id/status', async (req, res) => {
         });
       }
     }
+    // order.profit is left as a historical record — "accumulated profit" is
+    // computed live from orders currently DELIVERED, so this one simply
+    // stops counting toward it without needing to be zeroed out here.
   }
 
   res.json(order);

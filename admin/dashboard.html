@@ -29,8 +29,9 @@
       <button type="button" class="admin-btn admin-btn--small" id="applyRangeBtn">Appliquer</button>
     </div>
 
-    <div class="admin-grid admin-grid--4" style="margin-bottom:24px;">
+    <div class="admin-grid admin-grid--5" style="margin-bottom:24px;">
       <div class="stat-card"><p class="stat-card__label">Chiffre d'affaires</p><p class="stat-card__value" id="statRevenue">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Profit cumulé</p><p class="stat-card__value" id="statProfit">—</p><p class="stat-card__sub">Commandes livrées uniquement</p></div>
       <div class="stat-card"><p class="stat-card__label">Commandes</p><p class="stat-card__value" id="statOrders">—</p></div>
       <div class="stat-card"><p class="stat-card__label">Panier moyen</p><p class="stat-card__value" id="statAvg">—</p></div>
       <div class="stat-card"><p class="stat-card__label">Clients</p><p class="stat-card__value" id="statCustomers">—</p><p class="stat-card__sub" id="statRepeat"></p></div>
@@ -83,6 +84,7 @@ async function loadAnalytics(params) {
   const data = await adminApi(`/analytics${query}`);
 
   document.getElementById('statRevenue').textContent = formatMoney(data.revenue);
+  document.getElementById('statProfit').textContent = formatMoney(data.accumulatedProfit);
   document.getElementById('statOrders').textContent = data.orderCount;
   document.getElementById('statAvg').textContent = formatMoney(data.avgOrderValue);
   document.getElementById('statCustomers').textContent = data.customerCount;

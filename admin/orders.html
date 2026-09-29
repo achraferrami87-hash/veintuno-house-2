@@ -138,6 +138,11 @@ function openOrderModal(order) {
         ${order.discountAmount ? `<p>Réduction${order.promoCode ? ` (${order.promoCode.code})` : ''} : -${formatMoney(order.discountAmount)}</p>` : ''}
         ${order.deliveryFee ? `<p>Livraison : ${formatMoney(order.deliveryFee)}</p>` : ''}
         <p style="font-family:var(--serif);font-size:18px;font-weight:600;margin-top:6px;">Total : ${formatMoney(order.total)}</p>
+        <p style="margin-top:10px;color:var(--gray);">
+          ${order.status === 'DELIVERED' && order.profit != null
+            ? `Profit (comptabilisé) : <strong style="color:var(--black);">${formatMoney(order.profit)}</strong>`
+            : `Profit estimé : ${formatMoney(order.estimatedProfit)} <span style="font-size:11px;">(comptabilisé uniquement une fois la commande livrée)</span>`}
+        </p>
       </div>
       <div class="admin-modal__actions">
         <button type="button" class="admin-btn admin-btn--ghost" data-close>Fermer</button>

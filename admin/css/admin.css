@@ -80,10 +80,11 @@ button { font-family: inherit; }
 /* ---------- Cards / surfaces ---------- */
 .admin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; }
 .admin-grid { display: grid; gap: 20px; }
+.admin-grid--5 { grid-template-columns: repeat(5, 1fr); }
 .admin-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .admin-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .admin-grid--2 { grid-template-columns: repeat(2, 1fr); }
-@media (max-width: 1100px) { .admin-grid--4 { grid-template-columns: repeat(2, 1fr); } .admin-grid--3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1100px) { .admin-grid--5, .admin-grid--4 { grid-template-columns: repeat(2, 1fr); } .admin-grid--3 { grid-template-columns: repeat(2, 1fr); } }
 
 .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; }
 .stat-card__label { font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--gray); margin-bottom: 10px; }
@@ -202,5 +203,5 @@ table.admin-table { width: 100%; border-collapse: collapse; }
   .admin-sidebar__footer { display: none; }
   .admin-main { padding: 24px; }
   .admin-form__row { grid-template-columns: 1fr; }
-  .admin-grid--4, .admin-grid--3, .admin-grid--2 { grid-template-columns: 1fr; }
+  .admin-grid--5, .admin-grid--4, .admin-grid--3, .admin-grid--2 { grid-template-columns: 1fr; }
 }

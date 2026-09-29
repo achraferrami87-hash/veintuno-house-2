@@ -172,6 +172,10 @@ function openProductModal(product) {
           <div class="admin-field"><label>Stock</label><input type="number" name="stock" value="${isEdit ? product.stock : 50}"></div>
         </div>
         <div class="admin-form__row">
+          <div class="admin-field"><label>Prix de revient / coût (MAD, optionnel)</label><input type="number" step="0.01" name="costPrice" value="${isEdit && product.costPrice != null ? product.costPrice : ''}" placeholder="ex. 25"></div>
+          <div class="admin-field"><p class="admin-field-help" style="margin-top:24px;">Utilisé uniquement pour calculer le Profit d'une commande une fois livrée — jamais affiché au client.</p></div>
+        </div>
+        <div class="admin-form__row">
           <div class="admin-field"><label>Notes / courte description (carte produit)</label><input name="notes" value="${isEdit ? (product.notes || '') : ''}" placeholder="ex. Boisé / Ambré"></div>
           <div class="admin-field"><label>Contenance</label><input name="volume" value="${isEdit ? (product.volume || '') : ''}" placeholder="ex. 50ML"></div>
         </div>
@@ -304,7 +308,7 @@ function openProductModal(product) {
     const fd = new FormData(e.target);
     const payload = {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
-      price: fd.get('price'), stock: fd.get('stock'),
+      price: fd.get('price'), costPrice: fd.get('costPrice') || null, stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
       genders: fd.getAll('genders'), characteristicIds: fd.getAll('characteristicIds'), filterOptionIds: fd.getAll('filterOptionIds'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),

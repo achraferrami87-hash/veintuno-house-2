@@ -97,6 +97,7 @@ router.post('/', async (req, res) => {
       filterOptionIds: JSON.stringify(Array.isArray(body.filterOptionIds) ? body.filterOptionIds : []),
       volume: body.volume || null,
       price: Number(body.price),
+      costPrice: body.costPrice != null && body.costPrice !== '' ? Number(body.costPrice) : null,
       stock: Number(body.stock) || 0,
       lowStockThreshold: Number(body.lowStockThreshold) || 5,
       images: JSON.stringify(body.images || []),
@@ -140,6 +141,7 @@ router.put('/:id', async (req, res) => {
   if (body.volume !== undefined) data.volume = body.volume || null;
   const numFields = ['price', 'stock', 'lowStockThreshold', 'position'];
   numFields.forEach((f) => { if (body[f] !== undefined) data[f] = Number(body[f]); });
+  if (body.costPrice !== undefined) data.costPrice = body.costPrice != null && body.costPrice !== '' ? Number(body.costPrice) : null;
   const boolFields = ['isActive', 'isNew', 'isBestSeller', 'isLimitedEdition', 'packEligible', 'freePackEligible', 'flashSaleActive'];
   boolFields.forEach((f) => { if (body[f] !== undefined) data[f] = !!body[f]; });
   if (body.flashSalePrice !== undefined) data.flashSalePrice = body.flashSalePrice != null && body.flashSalePrice !== '' ? Number(body.flashSalePrice) : null;

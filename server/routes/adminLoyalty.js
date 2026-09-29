@@ -23,7 +23,9 @@ router.put('/settings', async (req, res) => {
   if (!settings) settings = await prisma.loyaltySettings.create({ data: {} });
   const data = {};
   if (req.body.amountPerPoint !== undefined) data.amountPerPoint = Number(req.body.amountPerPoint);
+  if (req.body.amountPerPointSecondary !== undefined) data.amountPerPointSecondary = Number(req.body.amountPerPointSecondary);
   if (req.body.isActive !== undefined) data.isActive = !!req.body.isActive;
+  if (req.body.pointsExplanation !== undefined) data.pointsExplanation = req.body.pointsExplanation || null;
   const updated = await prisma.loyaltySettings.update({ where: { id: settings.id }, data });
   res.json(updated);
 });

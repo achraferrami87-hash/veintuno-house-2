@@ -880,8 +880,16 @@ function collectionTileHTML(c) {
   // photo can replace the per-slug gradient without inline styles fighting
   // the pseudo-element (which can't read a plain inline background-image).
   const style = c.image ? ` style="--tile-image:url('${c.image}')"` : '';
+  // Small round previews of a few of this collection's own products —
+  // purely decorative, degrades to nothing if the API didn't provide any
+  // (e.g. the homepage's own FEATURED_COLLECTIONS resolver).
+  const previews = Array.isArray(c.previewImages) ? c.previewImages : [];
+  const pastillesHTML = previews.length
+    ? `<span class="collection-tile__pastilles">${previews.map((src) => `<span class="collection-tile__pastille"><img src="${src}" alt="" loading="lazy"></span>`).join('')}</span>`
+    : '';
   return `
     <a href="#collection/${c.slug}" class="collection-tile collection-tile--${c.slug}${c.image ? ' has-image' : ''}"${style}>
+      ${pastillesHTML}
       <span class="collection-tile__label">${c.name}</span>
       <span class="collection-tile__sub">${c.description || ''}</span>
     </a>`;
@@ -1050,6 +1058,14 @@ const SECTION_RENDERERS = {
   CLIENT_REVIEWS: clientReviewsSectionHTML,
 };
 
+function videoShowcaseCardHTML(v) {
+  return `
+    <div class="video-showcase__card">
+      <video class="video-showcase__video" src="${v.videoUrl}" ${v.posterImage ? `poster="${v.posterImage}"` : ''} muted loop playsinline preload="metadata" controls></video>
+      ${v.title ? `<p class="video-showcase__caption">${v.title}</p>` : ''}
+    </div>`;
+}
+
 async function initHomepage() {
   try {
     const data = await api('/homepage');
@@ -1060,6 +1076,13 @@ async function initHomepage() {
       mount.innerHTML = data.sections
         .map((s) => (SECTION_RENDERERS[s.type] ? SECTION_RENDERERS[s.type](s) : ''))
         .join('');
+    }
+
+    const videoSection = document.getElementById('videoShowcaseSection');
+    const videoGrid = document.getElementById('videoShowcaseGrid');
+    if (videoSection && videoGrid && Array.isArray(data.videos) && data.videos.length) {
+      videoGrid.innerHTML = data.videos.map(videoShowcaseCardHTML).join('');
+      videoSection.hidden = false;
     }
   } catch (e) { /* homepage will just show hero-less shell */ }
 
@@ -2278,12 +2301,19 @@ async function initLoyaltyPage() {
 
   if (form.phone) attachPhoneValidation(form.phone);
 
-  // Public, generic "how it works" blurb (the customer's actual balance and
-  // available rewards are shown after verification, below).
+  // "How it works" blurb — an admin-entered explanation (Dashboard >
+  // Fidélité) always wins; the original generic wording is only a fallback
+  // for as long as nothing's been entered, so nothing ever goes blank.
   if (howEl) {
     howEl.innerHTML = `
       <p><strong>Comment gagner des points ?</strong> Chaque commande livrée vous rapporte des points, proportionnellement au montant dépensé.</p>
       <p><strong>Comment les utiliser ?</strong> Contactez-nous sur WhatsApp avec votre solde pour échanger vos points contre une récompense.</p>`;
+    try {
+      const info = await api('/loyalty-info');
+      if (info && info.pointsExplanation) {
+        howEl.innerHTML = info.pointsExplanation.split('\n').filter((line) => line.trim()).map((line) => `<p>${line}</p>`).join('');
+      }
+    } catch (e) { /* keep the default wording above */ }
   }
 
   form.addEventListener('submit', async (e) => {

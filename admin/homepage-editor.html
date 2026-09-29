@@ -31,6 +31,15 @@
       <div id="slidesList" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
+    <div class="admin-card" style="margin-bottom:28px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="font-family:var(--serif);font-size:19px;">Vidéos (homepage)</h2>
+        <button type="button" class="admin-btn admin-btn--gold admin-btn--small" id="newVideoBtn">+ Ajouter une vidéo</button>
+      </div>
+      <p class="admin-field-help" style="margin-top:-8px;margin-bottom:14px;">Affichées dans une section dédiée de la page d'accueil, juste après les sections existantes. Glissez-déposez pour réordonner.</p>
+      <div id="videosList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
     <div class="admin-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h2 style="font-family:var(--serif);font-size:19px;">Sections de la homepage</h2>
@@ -192,6 +201,107 @@ function openSlideModal(slide) {
   });
 }
 
+// ---------- Videos ----------
+let videos = [];
+
+function videoRowHTML(v) {
+  return `
+    <div class="editor-row" data-sortable-id="${v.id}" data-id="${v.id}" draggable="true">
+      <span class="drag-handle">⠿</span>
+      <div class="editor-row__body">
+        <div class="editor-row__title">${v.title || '(sans titre)'}</div>
+        <div class="editor-row__sub">${v.videoUrl}</div>
+      </div>
+      ${v.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}
+      <div class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="toggle">${v.isActive ? 'Désactiver' : 'Activer'}</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </div>
+    </div>`;
+}
+
+async function loadVideos() {
+  videos = await adminApi('/homepage/videos');
+  document.getElementById('videosList').innerHTML = videos.length
+    ? videos.map(videoRowHTML).join('')
+    : '<p class="admin-field-help">Aucune vidéo.</p>';
+}
+
+document.getElementById('videosList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('[data-id]').dataset.id;
+  const video = videos.find((v) => v.id === id);
+  if (btn.dataset.action === 'edit') openVideoModal(video);
+  if (btn.dataset.action === 'toggle') { await adminApi(`/homepage/videos/${id}`, { method: 'PUT', body: JSON.stringify({ isActive: !video.isActive }) }); await loadVideos(); }
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog('Supprimer cette vidéo ?');
+    if (!ok) return;
+    await adminApi(`/homepage/videos/${id}`, { method: 'DELETE' }); toast('Vidéo supprimée.'); await loadVideos();
+  }
+});
+
+document.getElementById('newVideoBtn').addEventListener('click', () => openVideoModal(null));
+
+function openVideoModal(video) {
+  const isEdit = !!video;
+  const overlay = document.createElement('div');
+  overlay.className = 'admin-modal-overlay';
+  overlay.innerHTML = `
+    <div class="admin-modal">
+      <div class="admin-modal__header"><h2>${isEdit ? 'Modifier la vidéo' : 'Nouvelle vidéo'}</h2><button class="admin-modal__close" data-close>&times;</button></div>
+      <form class="admin-form" id="videoForm">
+        <div class="admin-field"><label>Titre / légende (optionnel)</label><input name="title" value="${isEdit ? (video.title || '') : ''}"></div>
+        <div class="admin-field"><label>Fichier vidéo (upload)</label>
+          <input type="file" id="videoFileUpload" accept="video/*">
+          <input type="hidden" name="videoUrl" value="${isEdit ? video.videoUrl : ''}">
+          ${isEdit ? `<p class="admin-field-help">Actuelle : ${video.videoUrl}</p>` : ''}
+        </div>
+        <div class="admin-field"><label>Image d'aperçu (poster, optionnel)</label>
+          <input type="file" id="videoPosterUpload" accept="image/*">
+          <input type="hidden" name="posterImage" value="${isEdit ? (video.posterImage || '') : ''}">
+        </div>
+        <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || video.isActive ? 'checked' : ''}> Active</label>
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--ghost" data-close>Annuler</button>
+          <button type="submit" class="admin-btn admin-btn--gold">${isEdit ? 'Enregistrer' : 'Créer'}</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => overlay.remove()));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  async function handleUpload(inputId, hiddenName) {
+    document.getElementById(inputId).addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const result = await adminApi('/upload', { method: 'POST', body: fd });
+        document.querySelector(`[name="${hiddenName}"]`).value = result.url;
+        toast('Fichier importé.');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  }
+  handleUpload('videoFileUpload', 'videoUrl');
+  handleUpload('videoPosterUpload', 'posterImage');
+
+  document.getElementById('videoForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if (!fd.get('videoUrl')) { toast('Importez un fichier vidéo.', 'error'); return; }
+    const payload = { title: fd.get('title') || null, videoUrl: fd.get('videoUrl'), posterImage: fd.get('posterImage') || null, isActive: fd.get('isActive') === 'on' };
+    try {
+      if (isEdit) await adminApi(`/homepage/videos/${video.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/homepage/videos', { method: 'POST', body: JSON.stringify(payload) });
+      toast(isEdit ? 'Vidéo mise à jour.' : 'Vidéo créée.');
+      overlay.remove(); await loadVideos();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
 // ---------- Sections ----------
 function sectionRowHTML(s) {
   return `
@@ -291,11 +401,15 @@ function openSectionModal(section) {
 (async () => {
   const admin = await initAdminPage('homepage-editor.html');
   if (!admin) return;
-  await Promise.all([loadSlides(), loadSections()]);
+  await Promise.all([loadSlides(), loadVideos(), loadSections()]);
 
   makeSortable(document.getElementById('slidesList'), async (orderedIds) => {
     await adminApi('/homepage/slides/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
     toast('Ordre mis à jour.'); await loadSlides();
+  });
+  makeSortable(document.getElementById('videosList'), async (orderedIds) => {
+    await adminApi('/homepage/videos/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.'); await loadVideos();
   });
   makeSortable(document.getElementById('sectionsList'), async (orderedIds) => {
     await adminApi('/homepage/sections/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });

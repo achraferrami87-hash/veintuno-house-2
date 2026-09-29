@@ -17,6 +17,24 @@ function getEffectivePrice(product) {
   return { price: product.flashSalePrice, onSale: true };
 }
 
+// A few of a collection's own product photos, used as small round "preview"
+// thumbnails next to its main square tile — reuses whatever product images
+// already exist, no new admin field involved.
+async function attachCollectionPreviews(collections) {
+  return Promise.all(collections.map(async (c) => {
+    const products = await prisma.product.findMany({
+      where: { collectionId: c.id, isActive: true },
+      orderBy: { position: 'asc' },
+      take: 3,
+      select: { images: true },
+    });
+    const previewImages = products
+      .map((p) => { try { return JSON.parse(p.images || '[]')[0]; } catch (e) { return null; } })
+      .filter(Boolean);
+    return { ...c, previewImages };
+  }));
+}
+
 function parseImages(product) {
   let images = [];
   try { images = JSON.parse(product.images || '[]'); } catch (e) { images = []; }
@@ -48,6 +66,18 @@ router.get('/settings', async (req, res) => {
   res.json(settings);
 });
 
+// ---------- Loyalty program info (public, read-only) ----------
+router.get('/loyalty-info', async (req, res) => {
+  let settings = await prisma.loyaltySettings.findFirst();
+  if (!settings) settings = await prisma.loyaltySettings.create({ data: {} });
+  res.json({
+    isActive: settings.isActive,
+    amountPerPoint: settings.amountPerPoint,
+    amountPerPointSecondary: settings.amountPerPointSecondary,
+    pointsExplanation: settings.pointsExplanation || null,
+  });
+});
+
 // ---------- Fragrance characteristics (tag vocabulary shared by search + quiz) ----------
 router.get('/characteristics', async (req, res) => {
   const characteristics = await prisma.characteristic.findMany({ orderBy: { position: 'asc' } });
@@ -62,7 +92,7 @@ router.get('/collections', async (req, res) => {
     where,
     orderBy: { position: 'asc' },
   });
-  res.json(collections);
+  res.json(await attachCollectionPreviews(collections));
 });
 
 router.get('/collections/:slug', async (req, res) => {
@@ -244,9 +274,10 @@ router.get('/bundles/:slug', async (req, res) => {
 
 // ---------- Homepage ----------
 router.get('/homepage', async (req, res) => {
-  const [slides, sections] = await Promise.all([
+  const [slides, sections, videos] = await Promise.all([
     prisma.heroSlide.findMany({ where: { isActive: true }, orderBy: { position: 'asc' } }),
     prisma.homepageSection.findMany({ where: { isActive: true }, orderBy: { position: 'asc' } }),
+    prisma.homepageVideo.findMany({ where: { isActive: true }, orderBy: { position: 'asc' } }),
   ]);
 
   const resolvedSections = await Promise.all(
@@ -270,7 +301,7 @@ router.get('/homepage', async (req, res) => {
       if (section.type === 'FEATURED_COLLECTIONS' && Array.isArray(config.collectionSlugs)) {
         const collections = await prisma.collection.findMany({ where: { slug: { in: config.collectionSlugs }, isActive: true } });
         const ordered = config.collectionSlugs.map((s) => collections.find((c) => c.slug === s)).filter(Boolean);
-        config = { ...config, collections: ordered };
+        config = { ...config, collections: await attachCollectionPreviews(ordered) };
       }
       if (section.type === 'BUNDLES') {
         const bundles = await prisma.bundle.findMany({
@@ -307,7 +338,7 @@ router.get('/homepage', async (req, res) => {
     })
   );
 
-  res.json({ slides, sections: resolvedSections });
+  res.json({ slides, sections: resolvedSections, videos });
 });
 
 // ---------- Nav menu ----------

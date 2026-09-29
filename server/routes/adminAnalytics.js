@@ -86,8 +86,19 @@ router.get('/', async (req, res) => {
   const lowStock = stockAlerts.filter((p) => p.stock > 0 && p.stock <= p.lowStockThreshold);
   const outOfStock = stockAlerts.filter((p) => p.stock <= 0);
 
+  // Lifetime, not scoped to the selected date range — mirrors how loyalty
+  // points accumulate over a customer's whole history. Only ever includes
+  // orders currently Delivered: one that's later cancelled drops out of
+  // this sum automatically, with nothing to manually reverse.
+  const profitAgg = await prisma.order.aggregate({
+    where: { status: 'DELIVERED', profit: { not: null } },
+    _sum: { profit: true },
+  });
+  const accumulatedProfit = profitAgg._sum.profit || 0;
+
   res.json({
     revenue,
+    accumulatedProfit,
     orderCount,
     avgOrderValue,
     customerCount,

@@ -73,6 +73,60 @@ router.post('/slides/reorder', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Homepage videos ----------
+router.get('/videos', async (req, res) => {
+  const videos = await prisma.homepageVideo.findMany({ orderBy: { position: 'asc' } });
+  res.json(videos);
+});
+
+router.post('/videos', async (req, res) => {
+  const body = req.body;
+  if (!body.videoUrl) return res.status(400).json({ error: 'Vidéo requise.' });
+  const count = await prisma.homepageVideo.count();
+  const video = await prisma.homepageVideo.create({
+    data: {
+      title: body.title || null,
+      videoUrl: body.videoUrl,
+      posterImage: body.posterImage || null,
+      isActive: body.isActive !== false,
+      position: count,
+    },
+  });
+  res.status(201).json(video);
+});
+
+router.put('/videos/:id', async (req, res) => {
+  const body = req.body;
+  const data = {};
+  ['title', 'videoUrl', 'posterImage'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
+  if (body.isActive !== undefined) data.isActive = !!body.isActive;
+  if (body.position !== undefined) data.position = Number(body.position);
+  try {
+    const video = await prisma.homepageVideo.update({ where: { id: req.params.id }, data });
+    res.json(video);
+  } catch (e) {
+    res.status(404).json({ error: 'Vidéo introuvable.' });
+  }
+});
+
+router.delete('/videos/:id', async (req, res) => {
+  try {
+    await prisma.homepageVideo.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(404).json({ error: 'Vidéo introuvable.' });
+  }
+});
+
+router.post('/videos/reorder', async (req, res) => {
+  const { orderedIds } = req.body;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds requis.' });
+  await prisma.$transaction(orderedIds.map((id, index) =>
+    prisma.homepageVideo.update({ where: { id }, data: { position: index } })
+  ));
+  res.json({ ok: true });
+});
+
 // ---------- Homepage sections ----------
 router.get('/sections', async (req, res) => {
   const sections = await prisma.homepageSection.findMany({ orderBy: { position: 'asc' } });
