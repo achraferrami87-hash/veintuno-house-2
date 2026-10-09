@@ -207,3 +207,43 @@ function formatMoney(n) {
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+// Videos go straight from the browser to storage (no serverless body limit),
+// with a visible progress bar. Other files keep the server-side upload path.
+function setUploadStatus(text) {
+  let el = document.getElementById('adminUploadStatus');
+  if (text === null) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'adminUploadStatus';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0c0c0c;color:#fff;padding:12px 20px;border-radius:4px;font-size:13px;z-index:9999;min-width:260px;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+}
+
+async function uploadMediaFile(file) {
+  if (!file.type.startsWith('video/')) {
+    const fd = new FormData(); fd.append('file', file);
+    return adminApi('/upload', { method: 'POST', body: fd });
+  }
+  // Videos upload straight from the browser to storage (never through this
+  // serverless function, which caps request bodies at ~4.5 MB). Supabase's
+  // signed-upload-url flow goes through its own SDK rather than a raw PUT —
+  // its gateway requires an apikey header the SDK sets for us — so there's
+  // no per-byte progress event here, just an indeterminate status message.
+  setUploadStatus('Envoi de la vidéo…');
+  try {
+    const { token, path: storagePath, bucket, url, supabaseUrl, supabaseAnonKey, contentType } = await adminApi('/upload/client', {
+      method: 'POST',
+      body: JSON.stringify({ filename: file.name, contentType: file.type }),
+    });
+    const { createClient } = await import('/js/vendor/supabase-client.js');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(storagePath, token, file, { contentType: contentType || file.type });
+    if (error) throw new Error(error.message || "Échec de l'envoi de la vidéo.");
+    return { url };
+  } finally {
+    setUploadStatus(null);
+  }
+}

@@ -140,9 +140,12 @@ function productCardHTML(p) {
     <article class="product-card reveal" data-href="#product/${p.slug}">
       <div class="product-card__media${hasPhoto ? ' product-card__media--photo' : ''}">
         ${p.onSale ? `<span class="flash-badge">${p.flashSaleLabel || 'Flash Sale'}</span>` : tag ? `<span class="product-card__tag${tag === 'Best Seller' ? ' product-card__tag--gold' : ''}">${tag}</span>` : ''}
+        <button type="button" class="product-card__favorite js-favorite-toggle${Favorites.has(p.slug) ? ' is-active' : ''}" data-slug="${p.slug}" aria-label="Ajouter aux favoris" aria-pressed="${Favorites.has(p.slug)}">
+          <svg viewBox="0 0 24 24"><path d="M12 20.5c-5.5-3.6-9-6.8-9-11A5 5 0 0 1 12 6.3 5 5 0 0 1 21 9.5c0 4.2-3.5 7.4-9 11z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/></svg>
+        </button>
         ${p.volume ? `<span class="product-card__volume">${p.volume}</span>` : ''}
         <a href="#product/${p.slug}" class="product-card__bottle">${productMediaHTML(p)}</a>
-        ${!packOnly ? `<button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Aperçu rapide</button>` : ''}
+        <button type="button" class="product-card__quickview js-quick-view" data-slug="${p.slug}">Voir les détails</button>
       </div>
       <div class="product-card__footer">
         <div class="product-card__heading">
@@ -150,11 +153,26 @@ function productCardHTML(p) {
           ${priceHTML(p, 'card')}
         </div>
         <p class="product-card__notes">${p.notes || ''}</p>
-        ${packOnly
-          ? `<a href="#collection/${p.collection.slug}" class="btn btn--outline product-card__cta">En pack uniquement →</a>`
-          : `<button type="button" class="btn btn--outline product-card__cta js-add-product" data-slug="${p.slug}">Ajouter au panier →</button>`}
+        ${ratingRowHTML(p)}
+        <div class="product-card__action-row">
+          ${packOnly
+            ? `<a href="#collection/${p.collection.slug}" class="btn-pill product-card__cta"><svg viewBox="0 0 24 24"><path d="M4 7h16M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg> Choisir un pack</a>`
+            : `<button type="button" class="btn-pill product-card__cta js-add-product" data-slug="${p.slug}"><svg viewBox="0 0 24 24"><path d="M4 6h2l1.5 11.5A2 2 0 0 0 9.48 19h8.04a2 2 0 0 0 1.98-1.7L20.5 9H6.2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="22" r="1.4" fill="currentColor"/><circle cx="17" cy="22" r="1.4" fill="currentColor"/></svg> Ajouter au panier</button>`}
+          <button type="button" class="product-card__favorite product-card__favorite--inline js-favorite-toggle${Favorites.has(p.slug) ? ' is-active' : ''}" data-slug="${p.slug}" aria-label="Ajouter aux favoris" aria-pressed="${Favorites.has(p.slug)}">
+            <svg viewBox="0 0 24 24"><path d="M12 20.5c-5.5-3.6-9-6.8-9-11A5 5 0 0 1 12 6.3 5 5 0 0 1 21 9.5c0 4.2-3.5 7.4-9 11z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
       </div>
     </article>`;
+}
+
+// Real approved-review average only — never a fabricated number. Renders
+// nothing for a product with zero approved reviews (ratingCount is attached
+// server-side by attachRatings, additive and optional).
+function ratingRowHTML(p) {
+  if (!p.ratingCount) return '';
+  const rounded = Math.round(p.ratingAverage);
+  return `<div class="product-card__rating">${starsHTML(rounded)} <span>(${Number(p.ratingAverage).toFixed(1)})</span></div>`;
 }
 
 // The whole card navigates to the product page — except the two buttons
@@ -162,7 +180,7 @@ function productCardHTML(p) {
 document.addEventListener('click', (e) => {
   const card = e.target.closest('.product-card[data-href]');
   if (!card) return;
-  if (e.target.closest('.js-quick-view, .js-add-product, .js-add-bundle, a')) return;
+  if (e.target.closest('.js-quick-view, .js-add-product, .js-add-bundle, .js-favorite-toggle, a')) return;
   window.location.hash = card.dataset.href;
 });
 
@@ -185,6 +203,11 @@ const composeDraftState = {
 // match straight into the pack currently being built, instead of only ever
 // linking back to "choose a pack" like it did before a pack was picked.
 let activePackComposer = null; // { packId, pack, quantities, changeQty } | null
+
+// Set by the "Ajouter au panier" action on a pack-only perfume's detail page
+// — the next pack composer the customer opens pre-selects this product as
+// one of their choices, instead of making them find it again in the grid.
+let pendingPreselectSlug = null;
 
 function stripAccents(str) {
   return str.normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -274,6 +297,80 @@ async function getPackById(packId) {
 }
 
 // ===========================
+// FAVORITES — client-side only (localStorage), per browser, no account needed
+// ===========================
+const Favorites = (() => {
+  const KEY = 'veintuno_favorites';
+  function load() {
+    try { return new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (e) { return new Set(); }
+  }
+  function save(set) {
+    try { localStorage.setItem(KEY, JSON.stringify(Array.from(set))); } catch (e) { /* storage unavailable */ }
+  }
+  function has(slug) { return load().has(slug); }
+  function toggle(slug) {
+    const set = load();
+    if (set.has(slug)) set.delete(slug); else set.add(slug);
+    save(set);
+    return set.has(slug);
+  }
+  function syncButton(btn) {
+    const isFav = has(btn.dataset.slug);
+    btn.classList.toggle('is-active', isFav);
+    btn.setAttribute('aria-pressed', String(isFav));
+  }
+  return { has, toggle, syncButton };
+})();
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.js-favorite-toggle');
+  if (!btn) return;
+  e.preventDefault();
+  Favorites.toggle(btn.dataset.slug);
+  // A card can show the heart twice (on the photo and next to the CTA) —
+  // keep every instance for this product in sync, not just the one clicked.
+  document.querySelectorAll(`.js-favorite-toggle[data-slug="${btn.dataset.slug}"]`).forEach(Favorites.syncButton);
+});
+
+// ===========================
+// FUNNEL TRACKING — anonymous, no personal data (random id per browser)
+// ===========================
+const Track = (() => {
+  const KEY = 'veintuno_sid';
+  let sid = null;
+  function visitorId() {
+    if (sid) return sid;
+    const fresh = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    try {
+      sid = localStorage.getItem(KEY) || fresh;
+      localStorage.setItem(KEY, sid);
+    } catch (e) { sid = fresh; }
+    return sid;
+  }
+  function send(event, label) {
+    try {
+      fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: visitorId(), event, label: label || null }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (e) { /* tracking never blocks the shop */ }
+  }
+  return { send };
+})();
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('a[href*="wa.me"]')) { Track.send('whatsapp_clicked'); return; }
+  const el = e.target.closest('button, a');
+  if (!el || el.closest('.qty-selector')) return;
+  const label = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (label.length > 1) Track.send('click', label);
+});
+
+// ===========================
 // CART
 // ===========================
 const Cart = (() => {
@@ -319,20 +416,22 @@ const Cart = (() => {
   let pendingCustomer = null;
   let clientOrderId = null;
   let isSubmittingOrder = false;
+  let formStarted = false;
 
   // Gel Douche individual-unit delivery fee (30 MAD) — this is only a
   // client-side preview so the customer sees it before submitting; the
   // server independently recomputes and enforces the real fee at checkout,
   // never trusting a value sent from here.
   let gelsDoucheCollectionId = null;
-  (async () => {
+  async function loadGelsDoucheId() {
     try {
       const cols = await api('/collections');
       const gd = cols.find((c) => c.slug === 'gels-douche');
       gelsDoucheCollectionId = gd ? gd.id : null;
       renderAll();
-    } catch (e) { /* ignore — fee preview simply stays 0 until this resolves */ }
-  })();
+    } catch (e) { /* retried when the checkout opens */ }
+  }
+  loadGelsDoucheId();
 
   function newClientOrderId() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -490,8 +589,10 @@ const Cart = (() => {
     if (deliveryRowEl) deliveryRowEl.hidden = fee <= 0;
     if (checkoutDeliveryFeeEl) checkoutDeliveryFeeEl.textContent = `${fee} MAD`;
     if (checkoutDeliveryRowEl) checkoutDeliveryRowEl.hidden = fee <= 0;
+    if (checkoutSubtotalEl) checkoutSubtotalEl.textContent = `${total()} MAD`;
     if (totalEl) totalEl.textContent = `${total()} MAD`;
     if (checkoutBtn) checkoutBtn.disabled = items.length === 0;
+    renderCheckoutSelection();
 
     if (!itemsEl) return;
     itemsEl.innerHTML = '';
@@ -558,6 +659,45 @@ const Cart = (() => {
     });
   }
 
+  function renderCheckoutSelection() {
+    const mount = document.getElementById('checkoutSelection');
+    if (!mount) return;
+    mount.textContent = '';
+    if (items.length === 0) return;
+    const title = document.createElement('p');
+    title.className = 'checkout-selection__title';
+    title.textContent = 'Votre sélection';
+    const list = document.createElement('ul');
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      const head = document.createElement('div');
+      head.className = 'checkout-selection__line';
+      const name = document.createElement('span');
+      name.textContent = item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name;
+      const price = document.createElement('span');
+      price.textContent = `${item.unitPrice * item.quantity} MAD`;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'checkout-selection__remove';
+      removeBtn.textContent = '×';
+      removeBtn.setAttribute('aria-label', `Retirer ${item.name}`);
+      removeBtn.addEventListener('click', () => removeItem(item.uid));
+      head.appendChild(name);
+      head.appendChild(price);
+      head.appendChild(removeBtn);
+      li.appendChild(head);
+      if (item.detail) {
+        const detail = document.createElement('p');
+        detail.className = 'checkout-selection__detail';
+        detail.textContent = item.detail;
+        li.appendChild(detail);
+      }
+      list.appendChild(li);
+    });
+    mount.appendChild(title);
+    mount.appendChild(list);
+  }
+
   function showStep(step) {
     stepBag.hidden = step !== 'bag';
     stepCheckout.hidden = step !== 'checkout';
@@ -570,6 +710,7 @@ const Cart = (() => {
     showStep(step || 'bag');
   }
   function close() {
+    if (!stepCheckout.hidden) Track.send('form_abandoned');
     drawer.classList.remove('cart-drawer--open');
     drawer.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
@@ -584,6 +725,14 @@ const Cart = (() => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && drawer.classList.contains('cart-drawer--open')) close();
   });
+
+  if (promoInput) {
+    promoInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      promoApplyBtn.click();
+    });
+  }
 
   if (promoApplyBtn) {
     promoApplyBtn.addEventListener('click', async () => {
@@ -611,23 +760,34 @@ const Cart = (() => {
     });
   }
 
-  checkoutBtn.addEventListener('click', () => {
+  function openCheckout() {
     if (items.length === 0) return;
     if (checkoutSubtotalEl) checkoutSubtotalEl.textContent = `${total()} MAD`;
     checkoutErrorEl.hidden = true;
-    // A fresh checkout attempt gets a fresh idempotency key. Reused across
-    // checkout↔review back-and-forth so a double-submit of the SAME attempt
-    // is recognized server-side and never creates a second order.
+    // A fresh checkout attempt gets a fresh idempotency key so a double-submit
+    // of the SAME attempt is recognized server-side and never creates a second order.
     clientOrderId = newClientOrderId();
-    showStep('checkout');
+    formStarted = false;
+    open('checkout');
+    if (gelsDoucheCollectionId === null) loadGelsDoucheId();
+    Track.send('checkout_opened');
     trackPixelEvent('InitiateCheckout', {
       value: total(), currency: 'MAD', num_items: itemCount(),
       content_ids: items.map((i) => i.productSlug || i.packId || i.bundleId).filter(Boolean),
     });
+  }
+
+  checkoutBtn.addEventListener('click', openCheckout);
+
+  checkoutForm.addEventListener('input', () => {
+    if (formStarted) return;
+    formStarted = true;
+    Track.send('form_started');
   });
 
   checkoutForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    Track.send('order_submit_clicked');
     if (!checkoutForm.reportValidity()) return;
     if (!isValidPhone(checkoutForm.phone.value)) {
       checkoutErrorEl.textContent = PHONE_ERROR_MSG;
@@ -659,6 +819,7 @@ const Cart = (() => {
           items: apiItems(),
           promoCode: appliedPromo ? appliedPromo.code : undefined,
           clientOrderId,
+          metaContext: metaBrowserContext(),
         }),
       });
 
@@ -682,7 +843,7 @@ const Cart = (() => {
       trackPixelEvent('Purchase', {
         value: result.total, currency: 'MAD', num_items: itemCount(),
         content_ids: items.map((i) => i.productSlug || i.packId || i.bundleId).filter(Boolean),
-      });
+      }, result.orderNumber);
 
       // Order is locked in server-side — now safe to wipe the local cart so
       // a page refresh or repeat visit can never resubmit the same order.
@@ -691,13 +852,15 @@ const Cart = (() => {
       pendingCustomer = null;
       clientOrderId = null;
       showStep('success');
+      Track.send('order_created');
+      Track.send('confirmation_viewed');
     } catch (err) {
       checkoutErrorEl.textContent = err.message;
       checkoutErrorEl.hidden = false;
     } finally {
       isSubmittingOrder = false;
       checkoutSubmitBtn.disabled = false;
-      checkoutSubmitBtn.textContent = 'Finaliser ma commande';
+      checkoutSubmitBtn.textContent = 'PASSER MA COMMANDE';
     }
   });
 
@@ -741,7 +904,7 @@ const Cart = (() => {
 
   renderAll();
 
-  return { addPack, addFreePack, addBundle, addProduct, open, close };
+  return { addPack, addFreePack, addBundle, addProduct, open, close, openCheckout };
 })();
 
 // ===========================
@@ -766,7 +929,7 @@ function hideAddToCartToast() {
   document.getElementById('atcContinueShopping').addEventListener('click', hideAddToCartToast);
   document.getElementById('atcContinue').addEventListener('click', () => {
     hideAddToCartToast();
-    if (Cart) Cart.open('bag');
+    if (Cart) Cart.openCheckout();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !toast.hidden) hideAddToCartToast(); });
 })();
@@ -780,6 +943,18 @@ document.addEventListener('click', async (e) => {
     Cart.addProduct(product);
     showAddToCartToast();
   } catch (err) { /* product unavailable */ }
+});
+
+// "Ajouter au panier" on a pack-only perfume's detail page: there's no
+// standalone cart to add it to (this collection sells only via packs), so
+// instead it carries the perfume forward as a pre-selected pack choice —
+// whichever pack the customer opens next starts with this one already
+// picked, instead of making them find it again in the grid.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.js-add-to-pack');
+  if (!btn) return;
+  pendingPreselectSlug = btn.dataset.slug;
+  location.hash = `#collection/${btn.dataset.collectionSlug}`;
 });
 
 document.addEventListener('click', (e) => {
@@ -987,6 +1162,97 @@ function bundlesSectionHTML(section) {
     </section>`;
 }
 
+// Shared pack card: used on the homepage packs section and on each
+// collection's detail page. `image`/`tagline`/`blurb` are optional and
+// admin-entered (Packs admin) — falls back to the plain size/price info
+// whenever an admin hasn't customized a given pack yet.
+// Reverted to the original plain card for now, at the user's request —
+// the photo/pill version above is kept working (packCardHTML callers,
+// the admin's per-pack image/tagline/blurb fields, and the CSS) in case
+// it comes back later; this just isn't rendering it at the moment.
+function packCardHTML(pack, i, featuredIndex, ctaText) {
+  return `
+    <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
+      ${i === featuredIndex ? '<span class="pack-card__badge">Le plus choisi</span>' : ''}
+      <h3>${pack.name}</h3>
+      <p class="pack-card__count">${pack.size} produits</p>
+      <p class="pack-card__price">${pack.price} <span>MAD</span></p>
+      <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
+      <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">${ctaText}</a>
+    </div>`;
+}
+
+// Optional rich banner at the top of a collection's detail page — entirely
+// hidden (falling back to the plain title row) unless an admin has set a
+// banner title or image for that collection (Collections admin > Bannière).
+function renderCollectionBanner(collection) {
+  const banner = document.getElementById('collectionBanner');
+  const plainHeader = document.getElementById('collectionDetailPlainHeader');
+  if (!banner) return;
+  const hasBanner = !!(collection.bannerTitle || collection.bannerImage);
+  banner.hidden = !hasBanner;
+  if (plainHeader) plainHeader.hidden = hasBanner;
+  if (!hasBanner) return;
+
+  const image = collection.bannerImage || collection.image;
+  document.getElementById('collectionBannerMedia').style.backgroundImage = image ? `url('${image}')` : '';
+  document.getElementById('collectionBannerTitle').textContent = collection.bannerTitle || collection.name;
+  document.getElementById('collectionBannerDesc').textContent = collection.description || '';
+  document.getElementById('collectionBannerCtaText').textContent = collection.bannerCtaText || 'Voir tous les produits';
+  const taglineEl = document.getElementById('collectionBannerTagline');
+  if (collection.bannerTagline) { taglineEl.textContent = collection.bannerTagline; taglineEl.hidden = false; }
+  else { taglineEl.hidden = true; }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#collectionBannerCta')) return;
+  const target = document.getElementById('collectionDetailToolbar') || document.getElementById('collectionDetailGrid');
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Rich banner at the top of a pack's composer page. Reuses the exact same
+// .collection-banner visual language as the collection detail page (the
+// extra .compose-banner class only adds the full-bleed breakout, since this
+// page's container — unlike the collection page's — is width-constrained).
+// Image falls back from the pack's own photo to its collection's banner/tile
+// photo; the vertical tagline is the parent collection's (a brand-level
+// phrase, not pack-specific), so a collection set once applies to every pack.
+function composeBannerHTML(pack) {
+  const collection = pack.collection || {};
+  const image = pack.image || collection.bannerImage || collection.image || null;
+  const tagline = collection.bannerTagline || '';
+  const features = [
+    { icon: 'leaf', label: 'Plusieurs parfums' },
+    { icon: 'gift', label: 'Un seul pack' },
+    { icon: 'star', label: 'Votre sélection unique' },
+  ];
+  const iconPaths = {
+    leaf: '<path d="M5 19c7-1 12-6 13-13-7 1-12 6-13 13z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 18c2-4 5-7 9-9" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>',
+    gift: '<rect x="4" y="9" width="16" height="11" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4 13h16M12 9v11" stroke="currentColor" stroke-width="1.4"/><path d="M12 9c-1.8 0-3-1-3-2.5S10.2 4 12 4s3 1 3 2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M12 9c1.8 0 3-1 3-2.5S13.8 4 12 4s-3 1-3 2.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>',
+    star: '<path d="M12 4l2.3 5.6 6 0.5-4.6 3.9 1.5 5.9L12 16.9 6.8 19.9l1.5-5.9-4.6-3.9 6-0.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/>',
+  };
+  return `
+    <div class="compose-banner">
+      <div class="compose-banner__content">
+        <a href="#compose/size/${pack.size}" class="collection-detail__back">← Changer de collection</a>
+        <p class="section__eyebrow">Composez votre ${pack.name}</p>
+        <h1>${pack.name}</h1>
+        <p class="compose-banner__desc">Vous pouvez sélectionner plusieurs fois le même parfum. Créez votre pack sur mesure selon vos envies.</p>
+        <div class="compose-banner__features">
+          ${features.map((f) => `
+            <div class="compose-banner__feature">
+              <span class="compose-banner__feature-icon"><svg viewBox="0 0 24 24">${iconPaths[f.icon]}</svg></span>
+              <span>${f.label}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+      ${image ? `
+        <div class="compose-banner__media" style="background-image:url('${image}')">
+          ${tagline ? `<p class="compose-banner__tagline">${tagline}</p>` : ''}
+        </div>` : ''}
+    </div>`;
+}
+
 function packsSectionHTML(section) {
   const packs = section.config.packs || [];
   if (!packs.length) return '';
@@ -998,15 +1264,7 @@ function packsSectionHTML(section) {
         <p class="section__eyebrow">${section.title || 'Formules'}</p>
         <h2 class="section__title">${section.subtitle || 'Composez votre pack'}</h2>
         <div class="packs__grid">
-          ${packs.map((pack, i) => `
-            <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
-              ${i === featuredIndex ? '<span class="pack-card__badge">Le plus choisi</span>' : ''}
-              <h3>${pack.name}</h3>
-              <p class="pack-card__count">${pack.size} produits</p>
-              <p class="pack-card__price">${pack.price} <span>MAD</span></p>
-              <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
-              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">Composer</a>
-            </div>`).join('')}
+          ${packs.map((pack, i) => packCardHTML(pack, i, featuredIndex, 'Composer')).join('')}
         </div>
       </div>
     </section>`;
@@ -1024,17 +1282,85 @@ function clientReviewCardHTML(r) {
 }
 
 function clientReviewsSectionHTML(section) {
-  const reviews = section.config.reviews || [];
-  if (!reviews.length) return '';
+  const photos = (section.config.reviews || []).filter((r) => r.customerPhoto);
+  if (!photos.length) return '';
   return `
-    <section class="client-reviews">
+    <section class="review-gallery">
       <div class="container">
-        <p class="section__eyebrow">${section.title || 'Témoignages'}</p>
-        <h2 class="section__title">${section.subtitle || 'Ce que nos clientes en disent'}</h2>
-        <div class="client-reviews__grid">${reviews.map(clientReviewCardHTML).join('')}</div>
+        <p class="section__eyebrow">${section.title || 'Avis clients'}</p>
+        <h2 class="section__title">${section.subtitle || 'Ce que nos clients disent'}</h2>
+        <div class="review-gallery__grid" data-zoom-group>
+          ${photos.map((r) => `
+            <button type="button" class="review-gallery__item js-zoom-image" data-src="${r.customerPhoto}" aria-label="Agrandir l'avis client">
+              <img src="${r.customerPhoto}" alt="Avis client" loading="lazy" decoding="async">
+            </button>`).join('')}
+        </div>
       </div>
     </section>`;
 }
+
+// Reusable full-screen image viewer. Any element with class .js-zoom-image
+// inside a [data-zoom-group] opens the group's images in order.
+const Lightbox = (() => {
+  let images = [];
+  let index = 0;
+  let overlay = null;
+
+  function render() {
+    overlay.querySelector('img').src = images[index];
+    const multiple = images.length > 1;
+    overlay.querySelector('.lightbox__nav--prev').hidden = !multiple;
+    overlay.querySelector('.lightbox__nav--next').hidden = !multiple;
+  }
+  function step(delta) {
+    index = (index + delta + images.length) % images.length;
+    render();
+  }
+  function close() {
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+  function build() {
+    overlay = document.createElement('div');
+    overlay.className = 'lightbox';
+    overlay.hidden = true;
+    overlay.innerHTML = `
+      <button type="button" class="lightbox__close" aria-label="Fermer">&times;</button>
+      <button type="button" class="lightbox__nav lightbox__nav--prev" aria-label="Image précédente">&#8249;</button>
+      <img class="lightbox__img" alt="">
+      <button type="button" class="lightbox__nav lightbox__nav--next" aria-label="Image suivante">&#8250;</button>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.closest('.lightbox__close')) close();
+      else if (e.target.closest('.lightbox__nav--prev')) step(-1);
+      else if (e.target.closest('.lightbox__nav--next')) step(1);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (overlay.hidden) return;
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowLeft') step(-1);
+      if (e.key === 'ArrowRight') step(1);
+    });
+  }
+  function open(list, start) {
+    if (!overlay) build();
+    images = list.filter(Boolean);
+    if (!images.length) return;
+    index = Math.min(Math.max(start || 0, 0), images.length - 1);
+    render();
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  return { open };
+})();
+
+document.addEventListener('click', (e) => {
+  const trigger = e.target.closest('.js-zoom-image');
+  if (!trigger) return;
+  const group = trigger.closest('[data-zoom-group]') || trigger.parentElement;
+  const items = Array.from(group.querySelectorAll('.js-zoom-image'));
+  Lightbox.open(items.map((el) => el.dataset.src), items.indexOf(trigger));
+});
 
 function promoBannerSectionHTML(section) {
   return `
@@ -1218,6 +1544,8 @@ async function renderComposePack(container, packId) {
   const pack = await getPackById(packId);
   if (!pack) { container.innerHTML = '<p class="admin-field-help">Pack introuvable.</p>'; return; }
   cacheProducts(pack.eligibleProducts);
+  Track.send('pack_selected', pack.name);
+  let perfumeSelectionStarted = false;
 
   // Quantities per slug — a customer can pick the same perfume several times
   // (e.g. Atlas Noir ×2, Minuit Cuir ×1) as long as the total equals pack.size.
@@ -1225,36 +1553,32 @@ async function renderComposePack(container, packId) {
   // pack (quick view, gender filter, going back and returning) never resets it.
   if (!composeDraftState.packs.has(packId)) composeDraftState.packs.set(packId, new Map());
   const quantities = composeDraftState.packs.get(packId);
+  if (pendingPreselectSlug && quantities.size === 0 && pack.eligibleProducts.some((p) => p.slug === pendingPreselectSlug)) {
+    quantities.set(pendingPreselectSlug, 1);
+  }
+  pendingPreselectSlug = null;
   const totalSelected = () => Array.from(quantities.values()).reduce((s, n) => s + n, 0);
 
   function cardsGridHTML() {
     return pack.eligibleProducts.map((p) => {
       const hasPhoto = Array.isArray(p.images) && !!p.images[0];
       return `
-      <div class="fragrance-card fragrance-card--stepper" data-slug="${p.slug}" data-name="${p.name}" data-genders="${(p.genders || []).join(',')}">
+      <div class="fragrance-card fragrance-card--stepper js-fragrance-add" data-slug="${p.slug}" data-name="${p.name}" data-genders="${(p.genders || []).join(',')}" role="button" tabindex="0" aria-label="Ajouter ${p.name} au pack">
         <div class="fragrance-card__media${hasPhoto ? ' fragrance-card__media--photo' : ''}">
           ${p.isBestSeller ? '<span class="product-card__tag product-card__tag--gold">Best Seller</span>' : p.isLimitedEdition ? '<span class="product-card__tag">Édition limitée</span>' : ''}
+          <span class="fragrance-card__qty-badge" hidden>0</span>
           <div class="product-card__bottle">${productMediaHTML(p)}</div>
         </div>
         <div class="fragrance-card__footer">
           <h3>${cardTitleHTML(p.name)}</h3>
           <p class="product-card__notes">${p.notes || ''}</p>
           <button type="button" class="fragrance-card__details js-quick-view" data-slug="${p.slug}">Voir les détails</button>
-          <div class="fragrance-card__qty qty-selector">
-            <button type="button" class="qty-minus" data-slug="${p.slug}" aria-label="Retirer">−</button>
-            <span class="fragrance-card__qty-value" data-slug="${p.slug}">0</span>
-            <button type="button" class="qty-plus" data-slug="${p.slug}" aria-label="Ajouter">+</button>
-          </div>
         </div>
       </div>`;
     }).join('');
   }
 
   container.innerHTML = `
-    <a href="#compose/size/${pack.size}" class="collection-detail__back">← Changer de collection</a>
-    <p class="section__eyebrow">Composez votre ${pack.name}</p>
-    <h2 class="section__title">${pack.name}</h2>
-    <p class="admin-field-help" style="margin-top:-12px;margin-bottom:20px;">Vous pouvez sélectionner plusieurs fois le même parfum.</p>
     <div id="composePackProgress"></div>
     ${fragranceToolbarHTML('composePack')}
     <button type="button" class="compose-find-scent-banner js-find-scent-open">
@@ -1265,7 +1589,7 @@ async function renderComposePack(container, packId) {
     <div class="chooser-grid compose-fragrance-grid" id="composePackGrid">${cardsGridHTML()}</div>
     <div class="compose-sticky-bar" id="composePackBar">
       <div class="pack-modal__recap" id="composePackRecap"><span class="pack-modal__recap-empty">Aucun parfum sélectionné</span></div>
-      <button type="button" class="btn btn--gold" id="composePackCta" disabled>Ajouter au panier</button>
+      <button type="button" class="btn btn--gold" id="composePackCta" disabled>Choisissez vos parfums</button>
     </div>`;
 
   const progressEl = document.getElementById('composePackProgress');
@@ -1288,17 +1612,20 @@ async function renderComposePack(container, packId) {
     cards.forEach((card) => {
       const slug = card.dataset.slug;
       const qty = quantities.get(slug) || 0;
-      card.querySelector('.fragrance-card__qty-value').textContent = qty;
       card.classList.toggle('is-selected', qty > 0);
-      const plusBtn = card.querySelector('.qty-plus');
-      plusBtn.disabled = isFull;
-      const minusBtn = card.querySelector('.qty-minus');
-      minusBtn.disabled = qty === 0;
+      card.classList.toggle('is-full', isFull && qty === 0);
+      const badge = card.querySelector('.fragrance-card__qty-badge');
+      // The "+" tells visitors they can click the card again to pick more
+      // than one unit of the same fragrance — hidden once the pack is full
+      // since clicking again wouldn't add anything at that point.
+      badge.textContent = qty > 0 && !isFull ? `${qty}+` : qty;
+      badge.hidden = qty === 0;
     });
     recap.innerHTML = '';
     if (total === 0) {
       recap.innerHTML = '<span class="pack-modal__recap-empty">Aucun parfum sélectionné</span>';
     } else {
+      recap.insertAdjacentHTML('beforeend', `<span class="compose-summary__name">${pack.name} · ${total}/${pack.size} · ${pack.price} MAD</span>`);
       cards.forEach((card) => {
         const slug = card.dataset.slug;
         const qty = quantities.get(slug) || 0;
@@ -1314,13 +1641,54 @@ async function renderComposePack(container, packId) {
       });
     }
     cta.disabled = total !== pack.size;
-    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${pack.price} MAD`;
+    cta.textContent = cta.disabled ? 'Choisissez vos parfums' : `Commander — ${pack.price} MAD`;
+  }
+
+  // Once the pack is complete, move straight to the order form — no extra
+  // "Commander" click needed. `autoAdvanceTriggered` guards against firing
+  // twice, and resets if the customer removes a perfume so completing again
+  // (including via Find Your Scent, which drives selection through the same
+  // setQty path) still advances automatically.
+  let autoAdvanceTriggered = false;
+
+  function finalizePackSelection() {
+    const slugs = [];
+    const names = [];
+    const images = [];
+    cards.forEach((card) => {
+      const slug = card.dataset.slug;
+      const qty = quantities.get(slug) || 0;
+      if (qty === 0) return;
+      const product = pack.eligibleProducts.find((p) => p.slug === slug);
+      const image = product && Array.isArray(product.images) ? product.images[0] : null;
+      for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); images.push(image); }
+    });
+    Track.send('perfumes_selected', pack.name);
+    cards.forEach((card) => {
+      if ((quantities.get(card.dataset.slug) || 0) > 0) Track.send('perfume_selected', card.dataset.name);
+    });
+    Cart.addPack(pack.id, pack.name, pack.price, slugs, names, images);
+    composeDraftState.packs.delete(packId);
+    Cart.openCheckout();
   }
 
   function setQty(slug, qty) {
     if (qty <= 0) quantities.delete(slug);
     else quantities.set(slug, qty);
+    if (!perfumeSelectionStarted && quantities.size > 0) {
+      perfumeSelectionStarted = true;
+      Track.send('perfume_selection_started', pack.name);
+    }
     updateUI();
+    const complete = totalSelected() === pack.size;
+    if (complete && !autoAdvanceTriggered) {
+      autoAdvanceTriggered = true;
+      // Brief pause so the customer visually sees their last pick register
+      // (card highlight, recap update) before the order form slides in.
+      setTimeout(finalizePackSelection, 450);
+    } else if (!complete) {
+      autoAdvanceTriggered = false;
+    }
   }
 
   function changeQty(slug, delta) {
@@ -1347,30 +1715,27 @@ async function renderComposePack(container, packId) {
 
   activePackComposer = { packId, pack, quantities, changeQty, highlightCard };
 
+  // The whole card adds one unit — except "Voir les détails", which still
+  // opens Quick View (handled by its own delegated listener elsewhere) and
+  // must never also add to the selection.
   grid.addEventListener('click', (e) => {
-    const plusBtn = e.target.closest('.qty-plus');
-    const minusBtn = e.target.closest('.qty-minus');
-    if (plusBtn) changeQty(plusBtn.dataset.slug, 1);
-    if (minusBtn) changeQty(minusBtn.dataset.slug, -1);
+    if (e.target.closest('.js-quick-view')) return;
+    const card = e.target.closest('.js-fragrance-add');
+    if (card) changeQty(card.dataset.slug, 1);
+  });
+  grid.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.target.closest('.js-quick-view')) return;
+    const card = e.target.closest('.js-fragrance-add');
+    if (card && e.target === card) { e.preventDefault(); changeQty(card.dataset.slug, 1); }
   });
 
+  // Kept as a manual fallback — in the normal flow, finalizePackSelection
+  // already runs automatically the instant the selection completes.
   cta.addEventListener('click', () => {
     if (cta.disabled) return;
-    const slugs = [];
-    const names = [];
-    const images = [];
-    cards.forEach((card) => {
-      const slug = card.dataset.slug;
-      const qty = quantities.get(slug) || 0;
-      if (qty === 0) return;
-      const product = pack.eligibleProducts.find((p) => p.slug === slug);
-      const image = product && Array.isArray(product.images) ? product.images[0] : null;
-      for (let i = 0; i < qty; i += 1) { slugs.push(slug); names.push(card.dataset.name); images.push(image); }
-    });
-    Cart.addPack(pack.id, pack.name, pack.price, slugs, names, images);
-    composeDraftState.packs.delete(packId);
-    lastComposeAddedSummary = { name: pack.name, itemNames: names };
-    location.hash = '#compose/added';
+    autoAdvanceTriggered = true;
+    finalizePackSelection();
   });
 
   updateUI();
@@ -1416,7 +1781,7 @@ async function renderComposeFree(container) {
     </div>
     <div class="compose-sticky-bar" id="composeFreeBar">
       <div class="pack-modal__recap" id="composeFreeRecap"><span class="pack-modal__recap-empty">Aucun produit sélectionné</span></div>
-      <button type="button" class="btn btn--gold" id="composeFreeCta" disabled>Ajouter au panier</button>
+      <button type="button" class="btn btn--gold" id="composeFreeCta" disabled>Choisissez vos parfums</button>
     </div>`;
 
   const progressEl = document.getElementById('composeFreeProgress');
@@ -1467,7 +1832,7 @@ async function renderComposeFree(container) {
     // flat price for the whole pack. Mirrors resolveItemsPricing (public.js).
     const price = selected.reduce((s, i) => s + i.price, 0);
     cta.disabled = selected.length < config.minItems;
-    cta.textContent = cta.disabled ? 'Ajouter au panier' : `Ajouter au panier — ${price.toFixed(2)} MAD`;
+    cta.textContent = cta.disabled ? 'Choisissez vos parfums' : `Commander — ${price.toFixed(2)} MAD`;
     if (priceHint && selected.length > 0) {
       priceHint.textContent = `${selected.length} produit(s) sélectionné(s) — total : ${price.toFixed(2)} MAD.`;
     }
@@ -1507,36 +1872,10 @@ async function renderComposeFree(container) {
     const price = selected.reduce((s, i) => s + i.price, 0);
     Cart.addFreePack(config.name, price, selected.map((s) => s.slug), selected.map((s) => s.name));
     composeDraftState.free.delete(draftKey);
-    lastComposeAddedSummary = { name: config.name, itemNames: selected.map((s) => s.name) };
-    location.hash = '#compose/added';
+    Cart.openCheckout();
   });
 
   updateUI();
-}
-
-// Set right before `location.hash = '#compose/added'` by the composer CTA
-// handlers — a plain transient variable is enough since the dedicated view is
-// only ever reached immediately after adding a pack, never by direct link.
-let lastComposeAddedSummary = null;
-
-function renderComposeAdded(container) {
-  const summary = lastComposeAddedSummary;
-  const name = summary ? summary.name : 'Votre pack';
-  const itemNames = summary ? summary.itemNames : [];
-  container.innerHTML = `
-    <div class="compose-success compose-success--page">
-      <div class="pack-modal__success-icon">
-        <svg viewBox="0 0 24 24"><path d="M5 13 l5 5 L20 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <h2 class="section__title">${name} ajouté au panier</h2>
-      ${itemNames.length ? `<ul class="pack-modal__success-list">${itemNames.map((n) => `<li>${n}</li>`).join('')}</ul>` : ''}
-      <div class="compose-success__actions">
-        <button type="button" class="btn btn--gold" id="composeAddedViewCart">Voir mon panier</button>
-        <a href="#compose" class="btn btn--outline">Composer un autre pack</a>
-      </div>
-    </div>`;
-  const viewCartBtn = document.getElementById('composeAddedViewCart');
-  if (viewCartBtn) viewCartBtn.addEventListener('click', () => Cart.open('bag'));
 }
 
 // ===========================
@@ -1798,7 +2137,6 @@ function initQuickView() {
       if (ctaBlock) ctaBlock.hidden = true;
     }
     wireProductDetailActions(body, product);
-    startVisitorCounter(body.querySelector('.js-visitor-counter'));
     startFlashCountdown(body.querySelector('.js-flash-countdown'));
 
     modal.classList.add('pack-modal--open');
@@ -1823,41 +2161,68 @@ function initQuickView() {
 // ===========================
 // PRODUCT DETAIL (shared between the full page view and Quick View)
 // ===========================
-let visitorCounterSeq = 0;
+// Olfactory pyramid: prefers the structured {name, image} notes an admin has
+// entered (Produits > Pyramide olfactive); falls back to splitting the plain
+// notesTop/notesHeart/notesBase text (name only, elegant placeholder instead
+// of a broken image) so products that predate this feature keep working.
+function olfactoryPlaceholderSVG() {
+  return '<svg viewBox="0 0 24 24" class="olfactory-note__placeholder" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M8 13c1-3 3-5 4-7 1 2 3 4 4 7a4 4 0 1 1-8 0z" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linejoin="round"/></svg>';
+}
+
+function olfactoryPyramidHTML(p) {
+  const sections = [
+    { title: 'Notes de tête', data: p.notesTopData, legacy: p.notesTop },
+    { title: 'Notes de cœur', data: p.notesHeartData, legacy: p.notesHeart },
+    { title: 'Notes de fond', data: p.notesBaseData, legacy: p.notesBase },
+  ];
+  const blocks = sections.map((s) => {
+    let notes = Array.isArray(s.data) ? s.data.filter((n) => n && n.name) : [];
+    if (!notes.length && s.legacy) {
+      notes = s.legacy.split(',').map((name) => ({ name: name.trim(), image: null })).filter((n) => n.name);
+    }
+    if (!notes.length) return '';
+    return `
+      <div class="olfactory-block">
+        <p class="olfactory-block__title">${s.title}</p>
+        <div class="olfactory-grid">
+          ${notes.map((n) => `
+            <div class="olfactory-note">
+              <span class="olfactory-note__img">${n.image ? `<img src="${n.image}" alt="${n.name} — note olfactive" loading="lazy" decoding="async">` : olfactoryPlaceholderSVG()}</span>
+              <span class="olfactory-note__name">${n.name}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }).filter(Boolean);
+  if (!blocks.length) return '';
+  return `<div class="product-detail__notes olfactory-pyramid">${blocks.join('')}</div>`;
+}
 
 function productDetailBodyHTML(p, compact) {
   const col = p.collection ? p.collection.name : '';
   const isPerfume = p.collection && p.collection.slug === 'parfums';
-  const notesHTML = (p.notesTop || p.notesHeart || p.notesBase) ? `
-    <div class="product-detail__notes">
-      ${p.notesTop ? `<p><strong>Notes de tête</strong> — ${p.notesTop}</p>` : ''}
-      ${p.notesHeart ? `<p><strong>Notes de cœur</strong> — ${p.notesHeart}</p>` : ''}
-      ${p.notesBase ? `<p><strong>Notes de fond</strong> — ${p.notesBase}</p>` : ''}
-    </div>` : '';
-
-  visitorCounterSeq += 1;
-  const counterId = `visitorCounter${visitorCounterSeq}`;
+  const notesHTML = olfactoryPyramidHTML(p);
 
   return `
-    <div class="product-detail__visual">${productMediaHTML(p)}</div>
+    ${productGalleryHTML(p)}
     <div class="product-detail__info">
       ${!compact ? `<a href="#collection/${p.collection ? p.collection.slug : ''}" class="collection-detail__back">← Retour à la collection</a>` : ''}
       ${col ? `<p class="section__eyebrow">${col}</p>` : ''}
       <h1 style="${compact ? 'font-size:26px;' : ''}">${p.name}</h1>
+      ${!compact ? `<div class="product-rating" data-rating-slug="${p.slug}"></div>` : ''}
       <div class="product-detail__meta-row">
         ${priceHTML(p, 'detail')}
         ${p.volume ? `<span class="product-detail__volume">${p.volume}</span>` : ''}
       </div>
       ${p.onSale && p.flashSaleEnd ? `<div class="flash-countdown js-flash-countdown" data-end="${p.flashSaleEnd}"></div>` : ''}
       <p class="product-detail__availability ${p.stock > 0 ? 'is-available' : 'is-unavailable'}">${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
-      <p class="visitor-counter js-visitor-counter" id="${counterId}" data-count="0"></p>
+      ${p.collection && p.collection.slug === 'gels-douche' ? '<p class="product-detail__delivery-note">Livraison : 30 MAD si le panier contient un seul gel douche (hors pack). Offerte dès 2 gels douche ou avec un pack.</p>' : ''}
       ${p.description ? `<p class="product-detail__description">${p.description}</p>` : ''}
       ${notesHTML}
       ${isPerfume ? `<p class="product-detail__disclaimer">${(siteSettingsCache && siteSettingsCache.perfumeDisclaimer) || 'Inspiré des plus grands parfums — non affilié aux marques citées.'}</p>` : ''}
       ${p.collection && p.collection.packOnly ? `
       <div class="product-detail__pack-only">
         <p>Disponible uniquement en pack.</p>
-        <a href="#collection/${p.collection.slug}" class="btn btn--gold btn--full">Choisir mon pack</a>
+        <button type="button" class="btn btn--gold btn--full js-add-to-pack" data-slug="${p.slug}" data-collection-slug="${p.collection.slug}">Ajouter au panier</button>
       </div>` : `
       <div class="product-detail__actions">
         <div class="qty-selector">
@@ -1866,10 +2231,98 @@ function productDetailBodyHTML(p, compact) {
           <button type="button" class="qty-plus" aria-label="Augmenter">+</button>
         </div>
         <button type="button" class="btn btn--gold js-detail-add" data-slug="${p.slug}" ${p.stock <= 0 ? 'disabled' : ''}>Ajouter au panier</button>
-      </div>`}
+      </div>
+      ${trustListHTML()}`}
+      ${!compact ? productBenefitsHTML(p) + productAccordionsHTML(p) : ''}
       ${!compact ? `<div class="product-reviews" id="productReviews-${p.slug}"><p class="admin-field-help">Chargement des avis...</p></div>` : ''}
     </div>`;
 }
+
+function parseList(raw) {
+  try {
+    const value = JSON.parse(raw || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch (e) { return []; }
+}
+
+function trustListHTML() {
+  const items = parseList(siteSettingsCache && siteSettingsCache.trustSignals);
+  if (!items.length) return '';
+  return `<ul class="product-trust">${items.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+}
+
+// Written from the delivery rules the server actually applies (see computeGelDoucheDeliveryFee).
+const GENERAL_DELIVERY_TEXT = 'Livraison partout au Maroc. Paiement à la livraison. Offerte sur les packs. Un seul gel douche commandé hors pack : 30 MAD.';
+
+function productAccordionsHTML(p) {
+  const sections = [];
+  if (p.ingredients) sections.push(['Ingrédients', p.ingredients]);
+  if (p.usage) sections.push(["Conseils d'utilisation", p.usage]);
+  sections.push(['Livraison', p.deliveryInfo || GENERAL_DELIVERY_TEXT]);
+  return `<div class="product-accordions">${sections.map(([title, body]) => `
+    <details class="product-accordion">
+      <summary>${title}</summary>
+      <p>${body}</p>
+    </details>`).join('')}</div>`;
+}
+
+function productBenefitsHTML(p) {
+  const items = parseList(p.benefits);
+  if (!items.length) return '';
+  return `<div class="product-benefits">
+    <p class="product-benefits__title">Pourquoi vous allez l'aimer</p>
+    <ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>
+  </div>`;
+}
+
+function productGalleryHTML(p) {
+  const images = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
+  if (!images.length) return `<div class="product-detail__visual">${productVisual(p.shape, p.color)}</div>`;
+  const thumbs = images.length > 1
+    ? `<div class="product-gallery__thumbs">${images.map((src, i) => `
+        <button type="button" class="product-gallery__thumb${i === 0 ? ' is-active' : ''}" data-index="${i}" aria-label="Photo ${i + 1}">
+          <img src="${src}" alt="" loading="lazy" decoding="async">
+        </button>`).join('')}</div>`
+    : '';
+  return `
+    <div class="product-detail__visual product-gallery" data-current="0" data-images="${JSON.stringify(images).replace(/"/g, '&quot;')}">
+      <button type="button" class="product-gallery__main" aria-label="Agrandir la photo">
+        <img src="${images[0]}" alt="${p.name}">
+      </button>
+      ${thumbs}
+    </div>`;
+}
+
+function setGalleryIndex(gallery, index) {
+  const images = JSON.parse(gallery.dataset.images);
+  const next = Math.min(Math.max(index, 0), images.length - 1);
+  gallery.dataset.current = next;
+  gallery.querySelector('.product-gallery__main img').src = images[next];
+  gallery.querySelectorAll('.product-gallery__thumb').forEach((t, i) => t.classList.toggle('is-active', i === next));
+}
+
+let gallerySwipeX = null;
+let gallerySwipedAt = 0;
+document.addEventListener('click', (e) => {
+  const thumb = e.target.closest('.product-gallery__thumb');
+  if (thumb) { setGalleryIndex(thumb.closest('.product-gallery'), Number(thumb.dataset.index)); return; }
+  const main = e.target.closest('.product-gallery__main');
+  if (!main || Date.now() - gallerySwipedAt < 400) return;
+  const gallery = main.closest('.product-gallery');
+  Lightbox.open(JSON.parse(gallery.dataset.images), Number(gallery.dataset.current) || 0);
+});
+document.addEventListener('touchstart', (e) => {
+  gallerySwipeX = e.target.closest('.product-gallery') ? e.touches[0].clientX : null;
+}, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (gallerySwipeX === null) return;
+  const gallery = e.target.closest('.product-gallery');
+  const dx = e.changedTouches[0].clientX - gallerySwipeX;
+  gallerySwipeX = null;
+  if (!gallery || Math.abs(dx) < 40) return;
+  gallerySwipedAt = Date.now();
+  setGalleryIndex(gallery, Number(gallery.dataset.current || 0) + (dx < 0 ? 1 : -1));
+});
 
 // ===========================
 // REVIEWS (customer-facing: display approved + submission form)
@@ -1882,6 +2335,10 @@ async function loadProductReviews(container, slug) {
   if (!container) return;
   let data;
   try { data = await api(`/products/${slug}/reviews`); } catch (e) { data = { reviews: [], avgRating: 0, count: 0, enabled: true }; }
+  const ratingEl = document.querySelector(`[data-rating-slug="${slug}"]`);
+  if (ratingEl && data.count > 0) {
+    ratingEl.innerHTML = `${starsHTML(Math.round(data.avgRating))} <span>${Number(data.avgRating).toFixed(1)}/5 · ${data.count} avis clients</span>`;
+  }
 
   if (data.enabled === false) { container.innerHTML = ''; return; }
 
@@ -1958,26 +2415,6 @@ async function loadProductReviews(container, slug) {
   });
 }
 
-// Discreet, elegant "social proof" indicator — purely cosmetic, randomized
-// client-side, never backed by real visitor tracking.
-function startVisitorCounter(el) {
-  if (!el) return;
-  function tick() {
-    const n = Math.floor(Math.random() * 31); // 0–30 inclusive
-    el.textContent = n <= 1
-      ? `${n} personne regarde ce produit maintenant`
-      : `${n} personnes regardent ce produit maintenant`;
-    el.hidden = n === 0 && Math.random() > 0.5; // occasionally go quiet, feels more organic
-  }
-  tick();
-  const interval = setInterval(tick, 4000 + Math.random() * 3000);
-  // Stop the ticker once this element leaves the DOM (route change) to avoid leaks.
-  const observer = new MutationObserver(() => {
-    if (!document.body.contains(el)) { clearInterval(interval); observer.disconnect(); }
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
-}
-
 // Renders a live "HH : MM : SS" countdown for a timed Flash Sale, and hides
 // itself once the promotion's end date has passed.
 function startFlashCountdown(el) {
@@ -2030,19 +2467,38 @@ function wireProductDetailActions(scope, product) {
 // and no stock/volume/reviews (bundles don't carry that data).
 // ===========================
 function bundleDetailBodyHTML(b) {
-  const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+  const included = b.items.map((it) => {
+    const images = Array.isArray(it.product.images) ? it.product.images.filter(Boolean) : [];
+    return { name: it.product.name, quantity: it.quantity, unitPrice: it.product.price, image: images[0] || null };
+  });
+  const individualValue = included.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
+  const savings = individualValue - b.price;
+  const bundleImages = b.image ? [b.image] : [];
+  const includedHTML = included.map((it) => `
+    <li class="bundle-included__item">
+      <span class="bundle-included__thumb">${it.image ? `<img src="${it.image}" alt="" loading="lazy">` : ''}</span>
+      <span class="bundle-included__name">${it.name}${it.quantity > 1 ? ` <em>× ${it.quantity}</em>` : ''}</span>
+      <span class="bundle-included__price">${it.unitPrice * it.quantity} MAD</span>
+    </li>`).join('');
   return `
-    <div class="product-detail__visual">${b.image ? `<img src="${b.image}" alt="${b.name}" loading="lazy">` : productVisual('bottle', '#C9A227')}</div>
+    <div class="product-detail__visual product-gallery" data-current="0" data-images="${JSON.stringify(bundleImages).replace(/"/g, '&quot;')}">
+      ${b.image
+        ? `<button type="button" class="product-gallery__main" aria-label="Agrandir la photo"><img src="${b.image}" alt="${b.name}" loading="lazy"></button>`
+        : productVisual('bottle', '#C9A227')}
+    </div>
     <div class="product-detail__info">
       <a href="#collections" class="collection-detail__back">← Retour aux collections</a>
       <p class="section__eyebrow">Bundle</p>
       <h1>${b.name}</h1>
       <div class="product-detail__meta-row">
         <p class="product-detail__price">${b.price} MAD</p>
+        ${savings > 0 ? `<span class="bundle-savings">Vous économisez ${savings} MAD</span>` : ''}
       </div>
+      ${savings > 0 ? `<p class="bundle-value">Valeur des produits pris séparément : ${individualValue} MAD</p>` : ''}
       ${b.description ? `<p class="product-detail__description">${b.description}</p>` : ''}
-      <div class="product-detail__notes">
-        <p><strong>Produits inclus</strong> — ${content}</p>
+      <div class="bundle-included">
+        <p class="bundle-included__title">Ce que contient ce bundle</p>
+        <ul>${includedHTML}</ul>
       </div>
       <div class="product-detail__actions">
         <div class="qty-selector">
@@ -2052,6 +2508,7 @@ function bundleDetailBodyHTML(b) {
         </div>
         <button type="button" class="btn btn--gold js-bundle-detail-add">Ajouter au panier</button>
       </div>
+      ${trustListHTML()}
     </div>`;
 }
 
@@ -2232,8 +2689,23 @@ async function initMetaPixel() {
 }
 
 // Fire-and-forget: no-op if the Pixel was never loaded (no Pixel ID configured).
-function trackPixelEvent(eventName, params) {
-  if (typeof window.fbq === 'function') window.fbq('track', eventName, params || {});
+function trackPixelEvent(eventName, params, eventId) {
+  if (typeof window.fbq !== 'function') return;
+  if (eventId) window.fbq('track', eventName, params || {}, { eventID: eventId });
+  else window.fbq('track', eventName, params || {});
+}
+
+function metaBrowserContext() {
+  const cookie = (name) => {
+    const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return m ? decodeURIComponent(m[1]) : undefined;
+  };
+  return {
+    fbp: cookie('_fbp'),
+    fbc: cookie('_fbc'),
+    userAgent: navigator.userAgent,
+    sourceUrl: location.href,
+  };
 }
 
 function whatsappHref(numberOrLink) {
@@ -2514,10 +2986,22 @@ function initRevealAnimations() {
       products = products.filter((p) => matchesByWordPrefix(stripAccents(p.name.toLowerCase()), q));
       bundles = bundles.filter((b) => matchesByWordPrefix(stripAccents(b.name.toLowerCase()), q));
     }
+    const sortEl = document.getElementById('collectionDetailSort');
+    const sortBy = sortEl && collectionDetailMode === 'category' ? sortEl.value : '';
+    const effectivePrice = (p) => (p.onSale ? p.displayPrice : p.price);
+    if (sortBy === 'price-asc') products = [...products].sort((a, b) => effectivePrice(a) - effectivePrice(b));
+    if (sortBy === 'price-desc') products = [...products].sort((a, b) => effectivePrice(b) - effectivePrice(a));
+    if (sortBy === 'name-asc') products = [...products].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    if (sortBy === 'price-asc') bundles = [...bundles].sort((a, b) => a.price - b.price);
+    if (sortBy === 'price-desc') bundles = [...bundles].sort((a, b) => b.price - a.price);
+    if (sortBy === 'name-asc') bundles = [...bundles].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
     detailGrid.innerHTML = products.map(productCardHTML).join('') + bundles.map(bundleCardHTML).join('');
     if (collectionDetailEmptyMsg) collectionDetailEmptyMsg.hidden = (products.length + bundles.length) > 0;
     initRevealAnimations();
   }
+
+  const collectionDetailSortEl = document.getElementById('collectionDetailSort');
+  if (collectionDetailSortEl) collectionDetailSortEl.addEventListener('change', applyCollectionDetailFilter);
 
   if (collectionDetailSearch) {
     collectionDetailSearch.addEventListener('input', () => {
@@ -2631,23 +3115,23 @@ function initRevealAnimations() {
     cacheProducts(data.products);
     cachePacks(data.packs);
 
+    // The rich photo banner added an extra "scroll past the image" step
+    // before reaching the packs — removed so packs/products show immediately
+    // under the simple title. (Kept as a function or re-enabling.)
+
     const packOnly = !!data.collection.packOnly;
 
     if (data.packs && data.packs.length) {
       const featuredIndex = data.packs.length === 3 ? 1 : -1;
+      const ctaText = packOnly ? 'Choisir ce pack' : 'Découvrir';
       detailPacks.innerHTML = `
-        <p class="section__eyebrow">${packOnly ? 'Sélection exclusive' : 'Formules'}</p>
-        <h3 class="section__title" style="margin-bottom:28px;font-size:26px;">${packOnly ? 'Choose Your Pack' : 'Composez votre pack'}</h3>
+        <p class="section__eyebrow">${packOnly ? 'Sélection exclusive' : 'Nos packs'}</p>
+        <div class="packs-heading-row">
+          <h3 class="section__title" style="font-size:26px;">${packOnly ? 'Choose Your Pack' : 'Sélection Exclusive'}</h3>
+          <a href="#collections" class="packs-heading-row__all">Voir tout <span>→</span></a>
+        </div>
         <div class="packs__grid">
-          ${data.packs.map((pack, i) => `
-            <div class="pack-card${i === featuredIndex ? ' pack-card--featured' : ''}">
-              ${i === featuredIndex ? '<span class="pack-card__badge">Le plus choisi</span>' : ''}
-              <h3>${pack.name}</h3>
-              <p class="pack-card__count">${pack.size} produits</p>
-              <p class="pack-card__price">${pack.price} <span>MAD</span></p>
-              <ul><li>${pack.size} produits au choix</li><li>Livraison offerte</li><li>Paiement à la livraison</li></ul>
-              <a href="#compose/pack/${pack.id}" class="btn btn--${i === featuredIndex ? 'gold' : 'outline'} btn--full">${packOnly ? 'Choisir ce pack' : 'Composer'}</a>
-            </div>`).join('')}
+          ${data.packs.map((pack, i) => packCardHTML(pack, i, featuredIndex, ctaText)).join('')}
         </div>`;
       detailPacks.hidden = false;
     }
@@ -2669,6 +3153,8 @@ function initRevealAnimations() {
       if (collectionDetailSearchBox) collectionDetailSearchBox.hidden = false;
       if (collectionDetailCategoryFilter) collectionDetailCategoryFilter.hidden = true;
       if (collectionDetailToolbar) collectionDetailToolbar.hidden = false;
+      const sortBoxGender = document.getElementById('collectionDetailSortBox');
+      if (sortBoxGender) sortBoxGender.hidden = true;
       genderFilter.hidden = false;
       genderFilter.querySelectorAll('.gender-filter__chip').forEach((c) => c.classList.toggle('is-active', c.dataset.gender === ''));
       applyGenderFilter('');
@@ -2701,6 +3187,10 @@ function initRevealAnimations() {
         }
       }
       if (collectionDetailToolbar) collectionDetailToolbar.hidden = !(showSearch || filterOptions.length > 0 || hasBundles);
+      const sortBox = document.getElementById('collectionDetailSortBox');
+      const sortSelect = document.getElementById('collectionDetailSort');
+      if (sortSelect) sortSelect.value = '';
+      if (sortBox) sortBox.hidden = data.products.length < 2;
       applyCollectionDetailFilter();
     }
   }
@@ -2735,7 +3225,6 @@ function initRevealAnimations() {
     });
     mount.innerHTML = productDetailBodyHTML(product);
     wireProductDetailActions(mount, product);
-    startVisitorCounter(mount.querySelector('.js-visitor-counter'));
     startFlashCountdown(mount.querySelector('.js-flash-countdown'));
     loadProductReviews(mount.querySelector(`#productReviews-${product.slug}`), product.slug);
   }
@@ -2789,6 +3278,10 @@ function initRevealAnimations() {
     // navigates anywhere else, and set fresh again by renderComposePack.
     if (!hash.startsWith('compose/pack/')) activePackComposer = null;
 
+    const [trackRoot, trackSlug] = hash.split('/');
+    if (trackRoot === 'collection' && trackSlug) Track.send('view_collection', trackSlug);
+    if (trackRoot === 'product' && trackSlug) Track.send('view_product', trackSlug);
+
     if (hash === 'collections') {
       viewCollections.hidden = false;
       window.scrollTo(0, 0);
@@ -2814,6 +3307,7 @@ function initRevealAnimations() {
       await renderComposeFormula(composeContainer);
     } else if (hash.startsWith('compose/size/')) {
       const size = Number(hash.split('/')[2]);
+      Track.send('view_pack', String(size));
       viewCompose.hidden = false;
       window.scrollTo(0, 0);
       await renderComposeType(composeContainer, size);
@@ -2826,10 +3320,6 @@ function initRevealAnimations() {
       viewCompose.hidden = false;
       window.scrollTo(0, 0);
       await renderComposePack(composeContainer, packId);
-    } else if (hash === 'compose/added') {
-      viewCompose.hidden = false;
-      window.scrollTo(0, 0);
-      renderComposeAdded(composeContainer);
     } else if (hash === 'receipt' || hash.startsWith('receipt/')) {
       const parts = hash.split('/');
       const orderNumber = parts[1] ? decodeURIComponent(parts[1]) : null;
@@ -2849,6 +3339,13 @@ function initRevealAnimations() {
   }
 
   window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', () => trackPixelEvent('PageView'));
+  try {
+    if (!sessionStorage.getItem('veintuno_visit')) {
+      sessionStorage.setItem('veintuno_visit', '1');
+      Track.send('visit');
+    }
+  } catch (e) { Track.send('visit'); }
   route();
 })();
 
@@ -3075,6 +3572,21 @@ function initFindYourScent() {
   syncActiveTab();
 })();
 
+(() => {
+  const navLinks = Array.from(document.querySelectorAll("#nav > a"));
+  if (!navLinks.length) return;
+  function syncNavCurrent() {
+    const hash = window.location.hash.replace("#", "");
+    navLinks.forEach((a) => {
+      const target = a.getAttribute("href").replace("#", "");
+      const isCurrent = target === "accueil" ? (hash === "" || hash === "accueil") : (hash === target || hash.startsWith(target + "/"));
+      a.classList.toggle("is-current", isCurrent);
+    });
+  }
+  window.addEventListener("hashchange", syncNavCurrent);
+  syncNavCurrent();
+})();
+
 // Boot
 initHomepage();
 initQuickView();
@@ -3085,5 +3597,169 @@ initContactPage();
 initThemeSwitch();
 initAnnouncementBar();
 initWhatsappFloat();
+// Real recent orders only (product, quantity, time) — no customer names.
+const PURCHASE_NOTICE = { firstDelayMs: 4000, intervalMs: 10000, visibleMs: 5000 };
+
+function purchaseAgoLabel(iso) {
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `il y a ${hours} h`;
+  return `il y a ${Math.round(hours / 24)} j`;
+}
+
+// Fisher-Yates — reshuffled after every full pass so the notice never
+// replays the exact same sequence twice in a row, without ever inventing
+// an order that didn't really happen.
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+async function initPurchaseNotice() {
+  let events = [];
+  try { events = await api('/recent-purchases'); } catch (e) { return; }
+  if (!events.length) return;
+  events = shuffle(events);
+
+  const host = document.createElement('div');
+  host.className = 'purchase-notice';
+  host.hidden = true;
+  host.setAttribute('role', 'status');
+  host.setAttribute('aria-live', 'polite');
+  host.innerHTML = '<div class="purchase-notice__thumb"></div><div class="purchase-notice__body"><p></p><span></span></div>';
+  document.body.appendChild(host);
+
+  const thumb = host.querySelector('.purchase-notice__thumb');
+  const text = host.querySelector('p');
+  const when = host.querySelector('span');
+  let index = 0;
+  let hideTimer = null;
+
+  function hide() {
+    host.classList.remove('is-visible');
+    setTimeout(() => { host.hidden = true; }, 400);
+  }
+  function show() {
+    if (index >= events.length) { events = shuffle(events); index = 0; }
+    const ev = events[index];
+    index += 1;
+    thumb.textContent = '';
+    if (ev.image) {
+      const img = document.createElement('img');
+      img.src = ev.image;
+      img.alt = '';
+      img.loading = 'lazy';
+      thumb.appendChild(img);
+    }
+    const count = ev.count || 1;
+    const personLabel = count === 1 ? '1 personne a pris' : `${count} personnes ont pris`;
+    text.textContent = `${personLabel} ${ev.name}${ev.quantity > 1 ? ` × ${ev.quantity}` : ''}`;
+    when.textContent = purchaseAgoLabel(ev.createdAt);
+    host.hidden = false;
+    requestAnimationFrame(() => host.classList.add('is-visible'));
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, PURCHASE_NOTICE.visibleMs);
+  }
+
+  // Jittered gap (±30%) instead of a fixed interval, so the rhythm itself
+  // doesn't feel robotic — only the gap between appearances varies; what's
+  // shown is still always pulled from real orders.
+  function scheduleNext() {
+    const jitter = PURCHASE_NOTICE.intervalMs * 0.3;
+    const gap = PURCHASE_NOTICE.intervalMs + (Math.random() * jitter * 2 - jitter);
+    setTimeout(() => { show(); scheduleNext(); }, gap);
+  }
+  setTimeout(() => { show(); scheduleNext(); }, PURCHASE_NOTICE.firstDelayMs);
+}
+
+// ===========================
+// SIMULATED ACTIVITY NOTICE — marketing-only, replaces the real-orders
+// notice above. Single switch to disable (SIMULATED_NOTICE_ENABLED). Never
+// reads order/customer data, never uses a real customer's name, and always
+// carries the small "Activité simulée" tag (SIMULATED_NOTICE_DISCLOSURE)
+// so it's never presented as an actual, unqualified sale.
+// ===========================
+const SIMULATED_NOTICE_ENABLED = true;
+const SIMULATED_NOTICE_INTERVAL_MS = 20 * 1000; // fixed gap between two popups
+const SIMULATED_NOTICE_VISIBLE_MS = 5000;
+const SIMULATED_NOTICE_DISCLOSURE = 'Activité simulée';
+
+// The "il y a ..." text inside each popup — not the gap between popups —
+// is what varies randomly, anywhere from a few seconds to 2 hours.
+function randomSimulatedAgo() {
+  const buckets = [
+    () => `il y a ${10 + Math.floor(Math.random() * 50)} secondes`,
+    () => `il y a ${1 + Math.floor(Math.random() * 59)} min`,
+    () => { const h = Math.random() < 0.5 ? 1 : 2; return `il y a ${h} heure${h > 1 ? 's' : ''}`; },
+  ];
+  return buckets[Math.floor(Math.random() * buckets.length)]();
+}
+// One image per product, kept in sync by hand (not fetched live) — update
+// the URL here if that product's photo changes in the admin.
+const SIMULATED_NOTICE_PRODUCTS = [
+  { name: 'Calm Nerves', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1789065635346-47ead225.jpeg' },
+  { name: 'Deep Sleep', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1788992444740-b4917805.jpeg' },
+  { name: 'Gel Douche God Of Fire', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1790619340448-07c514db.jpeg' },
+  { name: 'Gel Douche Tom Ford Lost Cherry', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1790619393805-15044bc0.png' },
+  { name: 'Pack Normal', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1791384438201-6de3a58f.webp' },
+  { name: 'Pack Familiale', image: null },
+  { name: 'Filer Pour Les Joues', image: 'https://winmmhiujf6k69wq.public.blob.vercel-storage.com/1789130472225-575eac4f.jpeg' },
+];
+const SIMULATED_NOTICE_MESSAGES = [
+  (name) => `Une personne vient de choisir ${name}`,
+  (name) => `Une personne vient de commander ${name} — ${randomSimulatedAgo()}`,
+];
+
+function initSimulatedActivityNotice() {
+  if (!SIMULATED_NOTICE_ENABLED || !SIMULATED_NOTICE_PRODUCTS.length) return;
+
+  const host = document.createElement('div');
+  host.className = 'purchase-notice';
+  host.hidden = true;
+  host.setAttribute('role', 'status');
+  host.setAttribute('aria-live', 'polite');
+  host.innerHTML = '<div class="purchase-notice__thumb"></div><div class="purchase-notice__body"><p></p><span></span></div>';
+  document.body.appendChild(host);
+
+  const thumb = host.querySelector('.purchase-notice__thumb');
+  const text = host.querySelector('p');
+  const disclosure = host.querySelector('span');
+  disclosure.textContent = SIMULATED_NOTICE_DISCLOSURE;
+  disclosure.className = 'purchase-notice__disclosure';
+  let hideTimer = null;
+
+  function hide() {
+    host.classList.remove('is-visible');
+    setTimeout(() => { host.hidden = true; }, 400);
+  }
+  function show() {
+    const item = SIMULATED_NOTICE_PRODUCTS[Math.floor(Math.random() * SIMULATED_NOTICE_PRODUCTS.length)];
+    const template = SIMULATED_NOTICE_MESSAGES[Math.floor(Math.random() * SIMULATED_NOTICE_MESSAGES.length)];
+    thumb.textContent = '';
+    if (item.image) {
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = '';
+      img.loading = 'lazy';
+      thumb.appendChild(img);
+    }
+    text.textContent = template(item.name);
+    host.hidden = false;
+    requestAnimationFrame(() => host.classList.add('is-visible'));
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, SIMULATED_NOTICE_VISIBLE_MS);
+  }
+  function scheduleNext() {
+    setTimeout(() => { show(); scheduleNext(); }, SIMULATED_NOTICE_INTERVAL_MS);
+  }
+  scheduleNext();
+}
+
 initMetaPixel();
 initFindYourScent();
+initSimulatedActivityNotice();

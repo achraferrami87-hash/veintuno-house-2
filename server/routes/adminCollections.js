@@ -43,13 +43,15 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, description, image, showInNav, packOnly, showSearch, showFilter } = req.body;
+  const { name, description, image, bannerImage, bannerTitle, bannerTagline, bannerCtaText, showInNav, packOnly, showSearch, showFilter } = req.body;
   if (!name) return res.status(400).json({ error: 'Nom requis.' });
   const slug = await uniqueSlug(name);
   const count = await prisma.collection.count();
   const collection = await prisma.collection.create({
     data: {
       slug, name, description: description || null, image: image || null, position: count,
+      bannerImage: bannerImage || null, bannerTitle: bannerTitle || null, bannerTagline: bannerTagline || null,
+      bannerCtaText: bannerCtaText || null,
       showInNav: showInNav !== false, packOnly: !!packOnly,
       showSearch: showSearch !== false, showFilter: !!showFilter,
     },
@@ -60,7 +62,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const body = req.body;
   const data = {};
-  ['name', 'description', 'image'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
+  ['name', 'description', 'image', 'bannerImage', 'bannerTitle', 'bannerTagline', 'bannerCtaText'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f] || null; });
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
   if (body.showInNav !== undefined) data.showInNav = !!body.showInNav;
   if (body.packOnly !== undefined) data.packOnly = !!body.packOnly;

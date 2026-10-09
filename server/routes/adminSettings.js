@@ -27,6 +27,12 @@ router.put('/', async (req, res) => {
   if (body.announcementText !== undefined && body.announcementText !== '') {
     data.announcementText = body.announcementText;
   }
+  if (body.trustSignals !== undefined) {
+    const list = Array.isArray(body.trustSignals) ? body.trustSignals : [];
+    data.trustSignals = JSON.stringify(
+      list.map((v) => String(v || '').trim().slice(0, 120)).filter(Boolean).slice(0, 6)
+    );
+  }
   if (body.metaPixelId !== undefined) {
     data.metaPixelId = body.metaPixelId.toString().trim() || null;
   }

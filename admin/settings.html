@@ -58,6 +58,20 @@
     </div>
 
     <div class="admin-card" style="margin-bottom:24px;max-width:640px;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;">Confiance (affiché près du bouton d'achat)</h2>
+      <form class="admin-form" id="trustForm">
+        <div class="admin-field">
+          <label>Une affirmation par ligne (6 maximum)</label>
+          <textarea name="trustSignals" rows="4"></textarea>
+          <p class="admin-field-help">N'écrivez que ce qui est vrai pour votre activité. Ex. « Livraison partout au Maroc », « Paiement à la livraison ».</p>
+        </div>
+        <div class="admin-modal__actions" style="justify-content:flex-start;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;max-width:640px;">
       <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;">Marketing</h2>
       <form class="admin-form" id="marketingForm">
         <div class="admin-field">
@@ -85,6 +99,9 @@ async function load() {
   form.instagramQrImage.value = settings.instagramQrImage || '';
   form.defaultTheme.value = settings.defaultTheme || 'clair';
   document.getElementById('marketingForm').metaPixelId.value = settings.metaPixelId || '';
+  let trustLines = [];
+  try { trustLines = JSON.parse(settings.trustSignals || '[]'); } catch (e) { trustLines = []; }
+  document.getElementById('trustForm').trustSignals.value = trustLines.join('\n');
   if (settings.instagramQrImage) {
     document.getElementById('qrPreview').innerHTML = `<img src="${settings.instagramQrImage}" style="width:120px;height:120px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
   }
@@ -116,6 +133,15 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
   try {
     await adminApi('/settings', { method: 'PUT', body: JSON.stringify(payload) });
     toast('Réglages enregistrés.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('trustForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const lines = String(new FormData(e.target).get('trustSignals') || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  try {
+    await adminApi('/settings', { method: 'PUT', body: JSON.stringify({ trustSignals: lines }) });
+    toast('Affirmations de confiance enregistrées.');
   } catch (err) { toast(err.message, 'error'); }
 });
 

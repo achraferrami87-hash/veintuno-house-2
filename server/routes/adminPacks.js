@@ -27,6 +27,9 @@ router.post('/', async (req, res) => {
       useCollectionEligibility: body.useCollectionEligibility !== false,
       isActive: body.isActive !== false,
       position: count,
+      image: body.image || null,
+      tagline: body.tagline || null,
+      blurb: body.blurb || null,
       collectionId: body.collectionId,
     },
   });
@@ -42,6 +45,7 @@ router.put('/:id', async (req, res) => {
   const body = req.body;
   const data = {};
   ['name', 'collectionId'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
+  ['image', 'tagline', 'blurb'].forEach((f) => { if (body[f] !== undefined) data[f] = body[f] || null; });
   ['size', 'price', 'position'].forEach((f) => { if (body[f] !== undefined) data[f] = Number(body[f]); });
   ['isCustomizable', 'useCollectionEligibility', 'isActive'].forEach((f) => { if (body[f] !== undefined) data[f] = !!body[f]; });
 

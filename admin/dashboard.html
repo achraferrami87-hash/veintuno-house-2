@@ -67,6 +67,46 @@
         <ul id="stockAlerts" class="admin-list"></ul>
       </div>
     </div>
+
+    <h2 style="margin:40px 0 6px;">Parcours client</h2>
+    <p class="admin-field-help" style="margin-bottom:20px;">Visiteurs anonymes distincts ayant atteint chaque étape sur la période sélectionnée.</p>
+
+    <div class="admin-grid admin-grid--4" style="margin-bottom:24px;">
+      <div class="stat-card"><p class="stat-card__label">Taux de conversion</p><p class="stat-card__value" id="fnConversion">—</p><p class="stat-card__sub">Commandes / visiteurs</p></div>
+      <div class="stat-card"><p class="stat-card__label">Finalisation du formulaire</p><p class="stat-card__value" id="fnCheckoutRate">—</p><p class="stat-card__sub">Commandes / formulaires ouverts</p></div>
+      <div class="stat-card"><p class="stat-card__label">Commandes terminées</p><p class="stat-card__value" id="fnOrders">—</p></div>
+      <div class="stat-card"><p class="stat-card__label">Formulaires abandonnés</p><p class="stat-card__value" id="fnAbandoned">—</p></div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <p class="stat-card__label" style="margin-bottom:14px;">Entonnoir</p>
+      <div id="funnelSteps" class="funnel"></div>
+    </div>
+
+    <div class="admin-grid admin-grid--2" style="margin-bottom:24px;">
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Boutons les plus cliqués</p>
+        <ul id="fnTopClicks" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Packs les plus ouverts</p>
+        <ul id="fnTopPacks" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Parfums les plus choisis</p>
+        <ul id="fnTopPerfumes" class="admin-list"></ul>
+      </div>
+      <div class="admin-card">
+        <p class="stat-card__label" style="margin-bottom:14px;">Produits les plus consultés</p>
+        <ul id="fnTopProducts" class="admin-list"></ul>
+      </div>
+    </div>
+
+    <div class="admin-card" style="margin-bottom:24px;">
+      <p class="stat-card__label" style="margin-bottom:6px;">Où les visiteurs quittent le site</p>
+      <p class="admin-field-help" style="margin-bottom:14px;">Dernière action enregistrée de chaque visiteur.</p>
+      <ul id="fnExitPoints" class="admin-list"></ul>
+    </div>
   </main>
 </div>
 <style>
@@ -74,6 +114,13 @@
 .admin-list li { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .admin-list li:last-child { border-bottom: none; padding-bottom: 0; }
 .admin-list li span:last-child { color: var(--gray); font-size: 12px; }
+.funnel { display: flex; flex-direction: column; gap: 14px; }
+.funnel__row { display: grid; grid-template-columns: 220px 1fr 130px; gap: 14px; align-items: center; font-size: 13px; }
+.funnel__bar { height: 26px; background: rgba(212,175,55,0.12); border-radius: 3px; overflow: hidden; }
+.funnel__fill { height: 100%; background: var(--gold); transition: width 0.4s ease; }
+.funnel__count { text-align: right; white-space: nowrap; }
+.funnel__drop { display: block; font-size: 11px; color: var(--gray); }
+@media (max-width: 720px) { .funnel__row { grid-template-columns: 1fr; gap: 6px; } .funnel__count { text-align: left; } }
 </style>
 <script src="js/admin-shared.js"></script>
 <script>
@@ -117,6 +164,97 @@ async function loadAnalytics(params) {
   stockAlerts.innerHTML = alerts.length
     ? alerts.slice(0, 8).map((p) => `<li><span>${p.name}</span><span class="badge ${p.stock <= 0 ? 'badge--red' : 'badge--gold'}">${p.label} (${p.stock})</span></li>`).join('')
     : '<li><span>Aucune alerte</span></li>';
+
+  await loadFunnel(params);
+}
+
+const FUNNEL_STEPS = [
+  ['visit', 'Visiteurs'],
+  ['view_pack', 'Ont vu les packs'],
+  ['pack_selected', 'Ont ouvert un pack'],
+  ['perfume_selection_started', 'Ont commencé la sélection'],
+  ['perfumes_selected', 'Ont terminé la sélection'],
+  ['checkout_opened', 'Ont ouvert le formulaire'],
+  ['form_started', 'Ont commencé à remplir'],
+  ['order_created', 'Commandes terminées'],
+];
+
+const EVENT_LABELS = {
+  visit: 'Visite du site',
+  view_collection: 'Collection consultée',
+  view_product: 'Produit consulté',
+  view_pack: 'Liste des packs consultée',
+  pack_selected: 'Pack ouvert',
+  perfume_selection_started: 'Sélection de parfums commencée',
+  perfume_selected: 'Parfum sélectionné',
+  perfumes_selected: 'Sélection de parfums terminée',
+  checkout_opened: 'Formulaire ouvert',
+  form_started: 'Formulaire commencé',
+  form_abandoned: 'Formulaire abandonné',
+  order_submit_clicked: 'Clic sur PASSER MA COMMANDE',
+  order_created: 'Commande créée',
+  confirmation_viewed: 'Confirmation vue',
+  whatsapp_clicked: 'Clic sur WhatsApp',
+  click: 'Clic sur un bouton',
+};
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function pct(part, whole) {
+  return whole ? `${Math.round((part / whole) * 100)} %` : '—';
+}
+
+function topList(el, rows) {
+  el.innerHTML = rows.length
+    ? rows.map((r) => `<li><span>${escHtml(r.label)}</span><span>${r.count}</span></li>`).join('')
+    : '<li><span>Aucune donnée pour l\'instant</span></li>';
+}
+
+async function loadFunnel(params) {
+  const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+  const data = await adminApi(`/analytics/funnel${query}`);
+
+  const sessionsOf = (name) => {
+    const row = data.events.find((e) => e.event === name);
+    return row ? row.sessions : 0;
+  };
+  const visitors = sessionsOf('visit');
+  const orders = sessionsOf('order_created');
+  const checkouts = sessionsOf('checkout_opened');
+  const abandoned = sessionsOf('form_abandoned');
+
+  document.getElementById('fnConversion').textContent = pct(orders, visitors);
+  document.getElementById('fnCheckoutRate').textContent = pct(orders, checkouts);
+  document.getElementById('fnOrders').textContent = orders;
+  document.getElementById('fnAbandoned').textContent = abandoned;
+
+  const maxCount = Math.max(1, ...FUNNEL_STEPS.map(([ev]) => sessionsOf(ev)));
+  let previous = null;
+  document.getElementById('funnelSteps').innerHTML = FUNNEL_STEPS.map(([ev, label]) => {
+    const count = sessionsOf(ev);
+    const drop = previous === null || previous === 0 ? '' : `<span class="funnel__drop">−${pct(previous - count, previous)} vs étape précédente</span>`;
+    previous = count;
+    return `
+      <div class="funnel__row">
+        <span>${label}</span>
+        <div class="funnel__bar"><div class="funnel__fill" style="width:${Math.round((count / maxCount) * 100)}%"></div></div>
+        <span class="funnel__count"><strong>${count}</strong>${drop}</span>
+      </div>`;
+  }).join('');
+
+  const labelsOf = (event) => data.topLabels.filter((r) => r.event === event).slice(0, 10).map((r) => ({ label: r.label, count: r.count }));
+  topList(document.getElementById('fnTopClicks'), labelsOf('click'));
+  topList(document.getElementById('fnTopPacks'), labelsOf('pack_selected'));
+  topList(document.getElementById('fnTopPerfumes'), labelsOf('perfume_selected'));
+  topList(document.getElementById('fnTopProducts'), labelsOf('view_product'));
+
+  const exitRows = data.lastEvents
+    .filter((r) => r.event !== 'order_created' && r.event !== 'confirmation_viewed')
+    .sort((a, b) => b.sessions - a.sessions)
+    .map((r) => ({ label: EVENT_LABELS[r.event] || r.event, count: r.sessions }));
+  topList(document.getElementById('fnExitPoints'), exitRows);
 }
 
 document.getElementById('periodTabs').addEventListener('click', (e) => {

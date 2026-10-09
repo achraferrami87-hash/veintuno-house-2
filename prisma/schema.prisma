@@ -29,6 +29,13 @@ model Collection {
   name        String
   description String?
   image       String?
+  // Optional banner shown at the top of this collection's detail page.
+  // All optional and admin-entered — falls back to the collection's own
+  // name/image when empty, never fabricated.
+  bannerImage   String?
+  bannerTitle   String?
+  bannerTagline String?
+  bannerCtaText String?
   position    Int      @default(0)
   isActive    Boolean  @default(true)
   showInNav   Boolean  @default(true)
@@ -75,6 +82,18 @@ model Product {
   notesTop          String?
   notesHeart        String?
   notesBase         String?
+  // Structured olfactory pyramid — JSON array of {name, image}. Optional and
+  // additive: the plain notesTop/notesHeart/notesBase strings above are never
+  // touched, so existing products keep working exactly as before. The
+  // storefront prefers this structured data when present, and falls back to
+  // splitting the plain string (name only, no image) otherwise.
+  notesTopData      String   @default("[]")
+  notesHeartData    String   @default("[]")
+  notesBaseData     String   @default("[]")
+  ingredients       String?
+  usage             String?
+  deliveryInfo      String?
+  benefits          String   @default("[]") // JSON array of short product-specific claims, all admin-entered
   gender            String? // legacy single value — kept for backward compatibility, no longer written to
   genders           String   @default("[]") // JSON array — a product can belong to several genders at once (e.g. Homme + Femme)
   filterOptionIds   String   @default("[]") // JSON array of CollectionFilterOption ids this product is tagged with (its own collection's custom filter)
@@ -192,6 +211,11 @@ model Pack {
   price                   Float
   isCustomizable          Boolean  @default(true) // client picks any eligible items
   useCollectionEligibility Boolean @default(true) // true = whole collection eligible, false = use explicit PackProduct list
+  // Optional marketing presentation, admin-entered, never fabricated —
+  // falls back to the existing size/price display when empty.
+  image                   String?
+  tagline                 String?
+  blurb                   String?
   isActive                Boolean  @default(true)
   position                Int      @default(0)
   createdAt               DateTime @default(now())
@@ -565,6 +589,17 @@ model BundleItem {
 // ===========================
 // REVIEWS — submitted after a delivered order, hidden until admin-approved.
 // ===========================
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  sessionId String
+  event     String
+  label     String?
+
+  @@index([event, createdAt])
+  @@index([sessionId])
+}
+
 model Review {
   id           String   @id @default(cuid())
   rating       Int
@@ -610,6 +645,7 @@ model SiteSettings {
   perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
   defaultTheme      String   @default("clair") // clair | sombre — the visitor's own choice (localStorage) still overrides this
   announcementText  String   @default("Livraison offerte partout au Maroc")
+  trustSignals      String   @default("[]") // JSON array of admin-entered trust statements
   metaPixelId       String?  // Meta (Facebook) Pixel ID — the storefront only loads the Pixel script when this is set
   updatedAt         DateTime @updatedAt
 }

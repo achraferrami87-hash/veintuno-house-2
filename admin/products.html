@@ -203,6 +203,20 @@ function openProductModal(product) {
           </div>
           <input name="notesBase" placeholder="Notes de fond (ex. Ambre, bois)" value="${isEdit ? (product.notesBase || '') : ''}">
         </div>
+        <div class="admin-field" style="border-top:1px solid var(--border);padding-top:14px;">
+          <label>Pyramide olfactive (optionnel)</label>
+          <p class="admin-field-help" style="margin-bottom:14px;">Chaque note peut avoir sa propre image. Si cette section est vide, la page produit utilise le texte simple ci-dessus.</p>
+          ${['Top', 'Heart', 'Base'].map((key) => `
+            <div class="note-pyramid-block" style="margin-bottom:18px;">
+              <p style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-bottom:8px;">${{ Top: 'Notes de tête', Heart: 'Notes de cœur', Base: 'Notes de fond' }[key]}</p>
+              <div class="note-card-grid" id="notes${key}Grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;"></div>
+              <button type="button" class="admin-btn admin-btn--small admin-btn--ghost" data-add-note="${key}">+ Ajouter une note</button>
+            </div>`).join('')}
+        </div>
+        <div class="admin-field"><label>Ingrédients (optionnel)</label><textarea name="ingredients">${isEdit ? (product.ingredients || '') : ''}</textarea></div>
+        <div class="admin-field"><label>Conseils d'utilisation (optionnel)</label><textarea name="usage">${isEdit ? (product.usage || '') : ''}</textarea></div>
+        <div class="admin-field"><label>Livraison spécifique à ce produit (optionnel)</label><textarea name="deliveryInfo">${isEdit ? (product.deliveryInfo || '') : ''}</textarea><p class="admin-field-help">Vide = l'information de livraison générale s'affiche.</p></div>
+        <div class="admin-field"><label>Pourquoi vous allez l'aimer (une affirmation par ligne, optionnel)</label><textarea name="benefits">${isEdit ? (() => { try { return JSON.parse(product.benefits || '[]').join('\n'); } catch (e) { return ''; } })() : ''}</textarea><p class="admin-field-help">N'écrivez que des affirmations vraies pour ce produit.</p></div>
         <div class="admin-form__row">
           <div class="admin-field"><label>Forme du visuel</label>
             <select name="shape">
@@ -271,14 +285,115 @@ function openProductModal(product) {
   renderProductFilterOptions();
   overlay.querySelector('[name="collectionId"]').addEventListener('change', renderProductFilterOptions);
 
+  const noteLabels = { Top: 'Notes de tête', Heart: 'Notes de cœur', Base: 'Notes de fond' };
+  const noteState = {
+    Top: isEdit && Array.isArray(product.notesTopData) ? product.notesTopData.map((n) => ({ ...n })) : [],
+    Heart: isEdit && Array.isArray(product.notesHeartData) ? product.notesHeartData.map((n) => ({ ...n })) : [],
+    Base: isEdit && Array.isArray(product.notesBaseData) ? product.notesBaseData.map((n) => ({ ...n })) : [],
+  };
+
+  function renderNoteGrid(key) {
+    const grid = document.getElementById(`notes${key}Grid`);
+    if (!grid) return;
+    const list = noteState[key];
+    grid.innerHTML = list.map((note, i) => `
+      <div class="note-card" style="width:120px;border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;">
+        <div style="width:100%;aspect-ratio:1/1;border-radius:50%;overflow:hidden;background:var(--bg-muted,#f3f1ec);display:flex;align-items:center;justify-content:center;margin-bottom:6px;">
+          ${note.image ? `<img src="${note.image}" style="width:100%;height:100%;object-fit:cover;">` : '<span style="color:var(--gray);font-size:11px;">Pas d\'image</span>'}
+        </div>
+        <input value="${note.name || ''}" placeholder="Nom" data-note-name="${key}:${i}" style="width:100%;font-size:12px;text-align:center;margin-bottom:6px;padding:4px;">
+        <label class="admin-btn admin-btn--small admin-btn--ghost" style="display:block;margin-bottom:4px;cursor:pointer;">
+          ${note.image ? 'Remplacer' : 'Ajouter image'}
+          <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" data-note-upload="${key}:${i}" hidden>
+        </label>
+        <div style="display:flex;justify-content:space-between;gap:4px;">
+          <button type="button" data-note-move="${key}:${i}:-1" ${i === 0 ? 'disabled' : ''} style="flex:1;font-size:11px;">◀</button>
+          <button type="button" data-note-remove="${key}:${i}" style="flex:1;font-size:11px;color:#b23b3b;">Suppr.</button>
+          <button type="button" data-note-move="${key}:${i}:1" ${i === list.length - 1 ? 'disabled' : ''} style="flex:1;font-size:11px;">▶</button>
+        </div>
+      </div>`).join('') || '<p class="admin-field-help">Aucune note ajoutée ici.</p>';
+  }
+  ['Top', 'Heart', 'Base'].forEach(renderNoteGrid);
+
+  overlay.querySelectorAll('[data-add-note]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.addNote;
+      noteState[key].push({ name: '', image: null });
+      renderNoteGrid(key);
+    });
+  });
+  overlay.addEventListener('input', (e) => {
+    const input = e.target.closest('[data-note-name]');
+    if (!input) return;
+    const [key, idx] = input.dataset.noteName.split(':');
+    noteState[key][Number(idx)].name = input.value;
+  });
+  overlay.addEventListener('click', (e) => {
+    const moveBtn = e.target.closest('[data-note-move]');
+    if (moveBtn) {
+      const [key, idxStr, dirStr] = moveBtn.dataset.noteMove.split(':');
+      const i = Number(idxStr); const j = i + Number(dirStr);
+      if (j < 0 || j >= noteState[key].length) return;
+      const list = noteState[key];
+      [list[i], list[j]] = [list[j], list[i]];
+      renderNoteGrid(key);
+      return;
+    }
+    const removeBtn = e.target.closest('[data-note-remove]');
+    if (removeBtn) {
+      const [key, idx] = removeBtn.dataset.noteRemove.split(':');
+      noteState[key].splice(Number(idx), 1);
+      renderNoteGrid(key);
+    }
+  });
+  overlay.addEventListener('change', async (e) => {
+    const uploadInput = e.target.closest('[data-note-upload]');
+    if (!uploadInput) return;
+    const file = uploadInput.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { toast('Image trop lourde (8 Mo maximum).', 'error'); uploadInput.value = ''; return; }
+    const [key, idx] = uploadInput.dataset.noteUpload.split(':');
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      noteState[key][Number(idx)].image = result.url;
+      renderNoteGrid(key);
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
   function renderImages() {
     document.getElementById('imageList').innerHTML = images.map((url, i) => `
-      <div style="position:relative;">
-        <img src="${url}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;">
-        <button type="button" data-remove-img="${i}" style="position:absolute;top:-6px;right:-6px;background:#000;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;">&times;</button>
+      <div style="width:86px;">
+        <div style="position:relative;">
+          <img src="${url}" style="width:86px;height:86px;object-fit:cover;border-radius:6px;${i === 0 ? 'outline:2px solid #D4AF37;outline-offset:1px;' : ''}">
+          <button type="button" data-remove-img="${i}" style="position:absolute;top:-6px;right:-6px;background:#000;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;">&times;</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:12px;">
+          <button type="button" data-move="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Avancer" style="cursor:pointer;">&#9664;</button>
+          <button type="button" data-primary="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Image principale" title="Image principale" style="cursor:pointer;">&#9733;</button>
+          <button type="button" data-move="${i}" data-dir="1" ${i === images.length - 1 ? 'disabled' : ''} aria-label="Reculer" style="cursor:pointer;">&#9654;</button>
+        </div>
       </div>`).join('');
-    document.getElementById('imageList').querySelectorAll('[data-remove-img]').forEach((btn) => {
+    const list = document.getElementById('imageList');
+    list.querySelectorAll('[data-remove-img]').forEach((btn) => {
       btn.addEventListener('click', () => { images.splice(Number(btn.dataset.removeImg), 1); renderImages(); });
+    });
+    list.querySelectorAll('[data-move]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.move);
+        const j = i + Number(btn.dataset.dir);
+        if (j < 0 || j >= images.length) return;
+        [images[i], images[j]] = [images[j], images[i]];
+        renderImages();
+      });
+    });
+    list.querySelectorAll('[data-primary]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.primary);
+        const [picked] = images.splice(i, 1);
+        images.unshift(picked);
+        renderImages();
+      });
     });
   }
   renderImages();
@@ -311,6 +426,9 @@ function openProductModal(product) {
       price: fd.get('price'), costPrice: fd.get('costPrice') || null, stock: fd.get('stock'),
       notes: fd.get('notes'), description: fd.get('description'),
       genders: fd.getAll('genders'), characteristicIds: fd.getAll('characteristicIds'), filterOptionIds: fd.getAll('filterOptionIds'), volume: fd.get('volume'), notesTop: fd.get('notesTop'), notesHeart: fd.get('notesHeart'), notesBase: fd.get('notesBase'),
+      notesTopData: noteState.Top, notesHeartData: noteState.Heart, notesBaseData: noteState.Base,
+      ingredients: fd.get('ingredients'), usage: fd.get('usage'), deliveryInfo: fd.get('deliveryInfo'),
+      benefits: String(fd.get('benefits') || '').split('\n').map((x) => x.trim()).filter(Boolean),
       shape: fd.get('shape'), color: fd.get('color'), videoUrl: fd.get('videoUrl'),
       images,
       isActive: fd.get('isActive') === 'on', isNew: fd.get('isNew') === 'on',

@@ -176,9 +176,8 @@ function openSlideModal(slide) {
     document.getElementById(inputId).addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const fd = new FormData(); fd.append('file', file);
       try {
-        const result = await adminApi('/upload', { method: 'POST', body: fd });
+        const result = await uploadMediaFile(file);
         document.querySelector(`[name="${hiddenName}"]`).value = result.url;
         toast('Fichier importé.');
       } catch (err) { toast(err.message, 'error'); }
@@ -277,9 +276,8 @@ function openVideoModal(video) {
     document.getElementById(inputId).addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const fd = new FormData(); fd.append('file', file);
       try {
-        const result = await adminApi('/upload', { method: 'POST', body: fd });
+        const result = await uploadMediaFile(file);
         document.querySelector(`[name="${hiddenName}"]`).value = result.url;
         toast('Fichier importé.');
       } catch (err) { toast(err.message, 'error'); }

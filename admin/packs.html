@@ -124,6 +124,15 @@ function openPackModal(pack) {
           <div class="admin-field"><label>Taille (nb. de produits)</label><input type="number" name="size" min="2" required value="${isEdit ? pack.size : 3}"></div>
           <div class="admin-field"><label>Prix (MAD)</label><input type="number" step="0.01" name="price" required value="${isEdit ? pack.price : ''}"></div>
         </div>
+        <div class="admin-field" style="border-top:1px solid var(--border);padding-top:14px;">
+          <label>Présentation visuelle (optionnel)</label>
+          <p class="admin-field-help" style="margin-bottom:10px;">Utilisée sur la carte du pack. Laissez vide pour garder la présentation actuelle (taille + prix).</p>
+          <input name="tagline" placeholder="Accroche (ex. L'élégance au quotidien)" value="${isEdit ? (pack.tagline || '') : ''}" style="margin-bottom:10px;">
+          <input name="blurb" placeholder="Petite phrase (ex. Un parfum, une signature.)" value="${isEdit ? (pack.blurb || '') : ''}" style="margin-bottom:10px;">
+          <div id="packImgPreview" style="margin-bottom:8px;">${isEdit && pack.image ? `<img src="${pack.image}" style="width:120px;height:80px;object-fit:cover;border-radius:8px;">` : ''}</div>
+          <input type="file" id="packImgUpload" accept="image/*">
+          <input type="hidden" name="image" value="${isEdit ? (pack.image || '') : ''}">
+        </div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || pack.isActive ? 'checked' : ''}> Actif</label>
         <label class="admin-checkbox"><input type="checkbox" id="useCollectionEligibility" name="useCollectionEligibility" ${!isEdit || pack.useCollectionEligibility ? 'checked' : ''}> Tous les produits de la collection sont éligibles</label>
         <div class="admin-field" id="explicitProductsField" style="display:${isEdit && !pack.useCollectionEligibility ? 'block' : 'none'};">
@@ -149,6 +158,16 @@ function openPackModal(pack) {
   }
   renderProductPicker();
   document.getElementById('packCollectionSelect').addEventListener('change', renderProductPicker);
+  document.getElementById('packImgUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      document.querySelector('#packForm [name="image"]').value = result.url;
+      document.getElementById('packImgPreview').innerHTML = `<img src="${result.url}" style="width:120px;height:80px;object-fit:cover;border-radius:8px;">`;
+    } catch (err) { toast(err.message, 'error'); }
+  });
   document.getElementById('useCollectionEligibility').addEventListener('change', (e) => {
     document.getElementById('explicitProductsField').style.display = e.target.checked ? 'none' : 'block';
   });
@@ -160,6 +179,7 @@ function openPackModal(pack) {
     const payload = {
       name: fd.get('name'), collectionId: fd.get('collectionId'),
       size: fd.get('size'), price: fd.get('price'),
+      tagline: fd.get('tagline') || null, blurb: fd.get('blurb') || null, image: fd.get('image') || null,
       isActive: fd.get('isActive') === 'on', useCollectionEligibility: useCol,
       isCustomizable: true,
     };

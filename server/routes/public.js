@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../db');
 const { resolvePromo } = require('../utils/promo');
 const { generateOrderNumber } = require('../utils/orderNumber');
+const { sendMetaPurchase } = require('../utils/metaCapi');
 
 const router = express.Router();
 
@@ -49,9 +50,35 @@ function parseImages(product) {
   const characteristics = Array.isArray(product.characteristics)
     ? product.characteristics.map((c) => c.characteristic.name)
     : undefined;
-  const out = { ...product, images, genders, filterOptionIds, displayPrice, onSale, originalPrice: product.price };
+  const parseNotes = (raw) => { try { return JSON.parse(raw || '[]'); } catch (e) { return []; } };
+  const out = {
+    ...product, images, genders, filterOptionIds, displayPrice, onSale, originalPrice: product.price,
+    notesTopData: parseNotes(product.notesTopData),
+    notesHeartData: parseNotes(product.notesHeartData),
+    notesBaseData: parseNotes(product.notesBaseData),
+  };
   if (characteristics) out.characteristics = characteristics;
   return out;
+}
+
+// Bulk rating aggregate for a list of products — one grouped query instead
+// of N per-product requests, so listing grids can show real stars without
+// a network call per card. Never fabricated: products with no approved
+// review get ratingCount: 0 and the frontend simply hides the stars.
+async function attachRatings(products) {
+  if (!products.length) return products;
+  const ids = products.map((p) => p.id);
+  const grouped = await prisma.review.groupBy({
+    by: ['productId'],
+    where: { productId: { in: ids }, status: 'APPROVED' },
+    _avg: { rating: true },
+    _count: { _all: true },
+  });
+  const byId = new Map(grouped.map((g) => [g.productId, { ratingAverage: g._avg.rating, ratingCount: g._count._all }]));
+  return products.map((p) => {
+    const r = byId.get(p.id);
+    return { ...p, ratingAverage: r ? r.ratingAverage : null, ratingCount: r ? r.ratingCount : 0 };
+  });
 }
 
 function isValidPhone(phone) {
@@ -126,7 +153,7 @@ router.get('/collections/:slug', async (req, res) => {
     // whether to show "Ajouter au panier" or "En pack uniquement" — attach
     // the collection we already fetched instead of an extra join, since
     // every product here belongs to it by definition.
-    products: products.map((p) => parseImages({ ...p, collection })),
+    products: await attachRatings(products.map((p) => parseImages({ ...p, collection }))),
     packs,
     bundles: bundles.map((b) => ({
       id: b.id, slug: b.slug, name: b.name, description: b.description,
@@ -339,6 +366,57 @@ router.get('/homepage', async (req, res) => {
   );
 
   res.json({ slides, sections: resolvedSections, videos });
+});
+
+// Recent real orders for the storefront's purchase notification. Only the
+// product name, quantity and time are exposed — never customer names or cities.
+router.get('/recent-purchases', async (req, res) => {
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const orders = await prisma.order.findMany({
+    where: { status: { not: 'CANCELLED' }, createdAt: { gte: since } },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: { createdAt: true, items: { select: { name: true, quantity: true, productId: true, packId: true }, take: 1 } },
+  });
+  const productIds = orders.map((o) => o.items[0] && o.items[0].productId).filter(Boolean);
+  const products = productIds.length
+    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, images: true } })
+    : [];
+  const imageById = new Map(products.map((p) => {
+    let images = [];
+    try { images = JSON.parse(p.images || '[]'); } catch (e) { images = []; }
+    return [p.id, images[0] || null];
+  }));
+
+  // How many real orders in the same recent window picked this exact pack/
+  // product — shown to visitors as "N personne(s) ont pris ...". Always a
+  // genuine count from the database, never an invented number.
+  const countCache = new Map();
+  async function countFor(item) {
+    const key = `${item.packId || ''}|${item.productId || ''}|${item.name}`;
+    if (countCache.has(key)) return countCache.get(key);
+    const where = {
+      order: { status: { not: 'CANCELLED' }, createdAt: { gte: since } },
+      ...(item.packId ? { packId: item.packId } : item.productId ? { productId: item.productId } : { name: item.name }),
+    };
+    const count = await prisma.orderItem.count({ where });
+    countCache.set(key, count);
+    return count;
+  }
+
+  const events = [];
+  for (const o of orders) {
+    const item = o.items[0];
+    if (!item || !item.name) continue;
+    events.push({
+      name: item.name,
+      quantity: item.quantity,
+      image: item.productId ? imageById.get(item.productId) || null : null,
+      createdAt: o.createdAt,
+      count: await countFor(item),
+    });
+  }
+  res.json(events);
 });
 
 // ---------- Nav menu ----------
@@ -843,6 +921,7 @@ router.post('/orders', async (req, res) => {
       return createdOrder;
     });
 
+    await sendMetaPurchase({ req, order, items, customer, metaContext: req.body.metaContext });
     res.json({ orderNumber: order.orderNumber, subtotal, discountAmount, total });
   } catch (err) {
     // Race-condition safety net: two near-simultaneous double-submits both
@@ -1015,5 +1094,35 @@ function summarizeComponentCounts(components) {
   for (const c of components) counts.set(c.name, (counts.get(c.name) || 0) + 1);
   return Array.from(counts.entries()).map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join(', ');
 }
+
+const FUNNEL_EVENTS = new Set([
+  'visit', 'view_collection', 'view_product', 'view_pack', 'pack_selected',
+  'perfume_selection_started', 'perfume_selected', 'perfumes_selected',
+  'checkout_opened', 'form_started', 'form_abandoned', 'order_submit_clicked',
+  'order_created', 'confirmation_viewed', 'whatsapp_clicked', 'click',
+]);
+
+const trackHits = new Map();
+function trackAllowed(req) {
+  const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+  const now = Date.now();
+  const rec = trackHits.get(ip) || { count: 0, start: now };
+  if (now - rec.start > 60000) { rec.count = 0; rec.start = now; }
+  rec.count += 1;
+  if (trackHits.size > 5000) trackHits.clear();
+  trackHits.set(ip, rec);
+  return rec.count <= 120;
+}
+
+router.post('/track', async (req, res) => {
+  if (!trackAllowed(req)) return res.status(429).end();
+  const { sessionId, event, label } = req.body || {};
+  if (typeof sessionId !== 'string' || sessionId.length < 8 || sessionId.length > 64) return res.status(400).end();
+  if (!FUNNEL_EVENTS.has(event)) return res.status(400).end();
+  await prisma.funnelEvent.create({
+    data: { sessionId, event, label: typeof label === 'string' ? label.slice(0, 120) : null },
+  });
+  res.status(204).end();
+});
 
 module.exports = router;

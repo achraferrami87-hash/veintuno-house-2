@@ -3,6 +3,46 @@ const prisma = require('../db');
 
 const router = express.Router();
 
+router.get('/funnel', async (req, res) => {
+  const now = new Date();
+  const defaultFrom = new Date(now); defaultFrom.setDate(defaultFrom.getDate() - 29); defaultFrom.setHours(0, 0, 0, 0);
+  const from = req.query.from ? new Date(`${req.query.from}T00:00:00`) : defaultFrom;
+  const to = req.query.to ? new Date(`${req.query.to}T23:59:59.999`) : now;
+
+  const perEvent = await prisma.$queryRaw`
+    SELECT event, COUNT(DISTINCT "sessionId")::int AS sessions, COUNT(*)::int AS events
+    FROM "FunnelEvent"
+    WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}
+    GROUP BY event`;
+
+  const lastEvents = await prisma.$queryRaw`
+    SELECT event, COUNT(*)::int AS sessions
+    FROM (
+      SELECT DISTINCT ON ("sessionId") "sessionId", event
+      FROM "FunnelEvent"
+      WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}
+      ORDER BY "sessionId", "createdAt" DESC
+    ) last
+    GROUP BY event`;
+
+  const topLabels = await prisma.$queryRaw`
+    SELECT event, label, COUNT(*)::int AS count
+    FROM "FunnelEvent"
+    WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}
+      AND label IS NOT NULL AND event IN ('click', 'pack_selected', 'view_product', 'view_collection', 'perfume_selected')
+    GROUP BY event, label
+    ORDER BY count DESC
+    LIMIT 300`;
+
+  res.json({
+    from,
+    to,
+    events: perEvent,
+    lastEvents,
+    topLabels,
+  });
+});
+
 router.get('/', async (req, res) => {
   const now = new Date();
   const defaultFrom = new Date(now); defaultFrom.setDate(defaultFrom.getDate() - 29); defaultFrom.setHours(0, 0, 0, 0);

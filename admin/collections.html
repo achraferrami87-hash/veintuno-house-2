@@ -101,6 +101,16 @@ function openModal(collection) {
           <input type="file" id="imgUpload" accept="image/*">
           <input type="hidden" name="image" value="${isEdit ? (collection.image || '') : ''}">
         </div>
+        <div class="admin-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+          <label>Bannière de la page collection (optionnel)</label>
+          <p class="admin-field-help" style="margin-bottom:10px;">Affichée en haut de la page de cette collection. Laissez vide pour ne pas afficher de bannière.</p>
+          <input name="bannerTitle" placeholder="Titre de la bannière (ex. Choisissez votre pack)" value="${isEdit ? (collection.bannerTitle || '') : ''}" style="margin-bottom:10px;">
+          <input name="bannerTagline" placeholder="Petite accroche verticale (ex. L'art de la fragrance)" value="${isEdit ? (collection.bannerTagline || '') : ''}" style="margin-bottom:10px;">
+          <input name="bannerCtaText" placeholder="Texte du bouton (ex. Voir tous les parfums)" value="${isEdit ? (collection.bannerCtaText || '') : ''}" style="margin-bottom:10px;">
+          <div id="bannerImgPreview" style="margin-bottom:8px;">${isEdit && collection.bannerImage ? `<img src="${collection.bannerImage}" style="width:160px;height:80px;object-fit:cover;border-radius:8px;">` : ''}</div>
+          <input type="file" id="bannerImgUpload" accept="image/*">
+          <input type="hidden" name="bannerImage" value="${isEdit ? (collection.bannerImage || '') : ''}">
+        </div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || collection.isActive ? 'checked' : ''}> Visible sur le site</label>
         <label class="admin-checkbox"><input type="checkbox" name="showInNav" ${!isEdit || collection.showInNav ? 'checked' : ''}> Afficher dans le menu de navigation</label>
         <p class="admin-field-help">Retirer une collection du menu ne la supprime jamais du site — elle reste accessible via la page Collections.</p>
@@ -187,11 +197,24 @@ function openModal(collection) {
     } catch (err) { toast(err.message, 'error'); }
   });
 
+  document.getElementById('bannerImgUpload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const result = await adminApi('/upload', { method: 'POST', body: fd });
+      document.querySelector('[name="bannerImage"]').value = result.url;
+      document.getElementById('bannerImgPreview').innerHTML = `<img src="${result.url}" style="width:160px;height:80px;object-fit:cover;border-radius:8px;">`;
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
   document.getElementById('collectionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = {
       name: fd.get('name'), description: fd.get('description'), image: fd.get('image') || null,
+      bannerImage: fd.get('bannerImage') || null, bannerTitle: fd.get('bannerTitle') || null, bannerTagline: fd.get('bannerTagline') || null,
+      bannerCtaText: fd.get('bannerCtaText') || null,
       isActive: fd.get('isActive') === 'on', showInNav: fd.get('showInNav') === 'on', packOnly: fd.get('packOnly') === 'on',
       showSearch: fd.get('showSearch') === 'on', showFilter: fd.get('showFilter') === 'on',
     };

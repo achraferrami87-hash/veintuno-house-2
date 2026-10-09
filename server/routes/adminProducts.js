@@ -3,6 +3,29 @@ const prisma = require('../db');
 
 const router = express.Router();
 
+
+function cleanTextList(value, maxItems, maxLength) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => String(v || '').trim().slice(0, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+// Olfactory pyramid notes: {name, image}. Name is required (a note with no
+// name is dropped); image is optional (a note can exist before its photo is
+// uploaded — the storefront shows a placeholder until then).
+function cleanNoteList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => ({
+      name: String((v && v.name) || '').trim().slice(0, 60),
+      image: v && v.image ? String(v.image).trim().slice(0, 500) : null,
+    }))
+    .filter((v) => v.name)
+    .slice(0, 20);
+}
+
 function slugify(str) {
   const normalized = str.toString().toLowerCase().trim().normalize('NFD');
   let stripped = '';
@@ -34,7 +57,13 @@ function withGendersArray(product) {
   const characteristicIds = Array.isArray(product.characteristics)
     ? product.characteristics.map((c) => c.characteristicId)
     : undefined;
-  const out = { ...product, genders, filterOptionIds };
+  const parseNotes = (raw) => { try { return JSON.parse(raw || '[]'); } catch (e) { return []; } };
+  const out = {
+    ...product, genders, filterOptionIds,
+    notesTopData: parseNotes(product.notesTopData),
+    notesHeartData: parseNotes(product.notesHeartData),
+    notesBaseData: parseNotes(product.notesBaseData),
+  };
   if (characteristicIds) out.characteristicIds = characteristicIds;
   return out;
 }
@@ -92,6 +121,13 @@ router.post('/', async (req, res) => {
       notesTop: body.notesTop || null,
       notesHeart: body.notesHeart || null,
       notesBase: body.notesBase || null,
+      notesTopData: JSON.stringify(cleanNoteList(body.notesTopData)),
+      notesHeartData: JSON.stringify(cleanNoteList(body.notesHeartData)),
+      notesBaseData: JSON.stringify(cleanNoteList(body.notesBaseData)),
+      ingredients: body.ingredients || null,
+      usage: body.usage || null,
+      deliveryInfo: body.deliveryInfo || null,
+      benefits: JSON.stringify(cleanTextList(body.benefits, 8, 120)),
       gender: Array.isArray(body.genders) && body.genders.length ? body.genders[0] : (body.gender || null),
       genders: JSON.stringify(Array.isArray(body.genders) ? body.genders : (body.gender ? [body.gender] : [])),
       filterOptionIds: JSON.stringify(Array.isArray(body.filterOptionIds) ? body.filterOptionIds : []),
@@ -126,8 +162,12 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const body = req.body;
   const data = {};
-  const fields = ['name', 'description', 'notes', 'notesTop', 'notesHeart', 'notesBase', 'videoUrl', 'shape', 'color', 'collectionId'];
+  const fields = ['name', 'description', 'notes', 'notesTop', 'notesHeart', 'notesBase', 'ingredients', 'usage', 'deliveryInfo', 'videoUrl', 'shape', 'color', 'collectionId'];
   fields.forEach((f) => { if (body[f] !== undefined) data[f] = body[f]; });
+  if (body.benefits !== undefined) data.benefits = JSON.stringify(cleanTextList(body.benefits, 8, 120));
+  if (body.notesTopData !== undefined) data.notesTopData = JSON.stringify(cleanNoteList(body.notesTopData));
+  if (body.notesHeartData !== undefined) data.notesHeartData = JSON.stringify(cleanNoteList(body.notesHeartData));
+  if (body.notesBaseData !== undefined) data.notesBaseData = JSON.stringify(cleanNoteList(body.notesBaseData));
   if (body.genders !== undefined) {
     const gArr = Array.isArray(body.genders) ? body.genders : [];
     data.genders = JSON.stringify(gArr);

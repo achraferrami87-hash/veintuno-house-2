@@ -75,6 +75,15 @@ app.use('/api/admin/quiz', requireAdmin, adminQuizRoutes);
 app.use('/api/admin/collection-filters', requireAdmin, adminCollectionFiltersRoutes);
 
 // ---------- Static files ----------
+// These three files change on every deploy; Vercel's edge was caching them
+// for hours despite "max-age=0, must-revalidate" (visitors kept getting an
+// old script.js/index.html long after a new version went live) — no-store
+// forces the edge to always hit this origin for them.
+const NO_CACHE_PATHS = new Set(['/', '/index.html', '/js/script.js', '/css/style.css']);
+app.use((req, res, next) => {
+  if (NO_CACHE_PATHS.has(req.path)) res.set('Cache-Control', 'no-store');
+  next();
+});
 // Uploaded media now lives on Vercel Blob (see routes/adminUpload.js) and is
 // served directly from Blob's own public URL — nothing to serve locally here.
 app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));
