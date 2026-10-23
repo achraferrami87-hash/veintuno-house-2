@@ -5,6 +5,7 @@ const cookieSession = require('cookie-session');
 const requireAdmin = require('./middleware/requireAdmin');
 
 const publicRoutes = require('./routes/public');
+const seoRoutes = require('./routes/seo');
 const adminAuthRoutes = require('./routes/adminAuth');
 const adminProductsRoutes = require('./routes/adminProducts');
 const adminCollectionsRoutes = require('./routes/adminCollections');
@@ -52,6 +53,11 @@ app.use('/api', (req, res, next) => {
 
 // ---------- Public API (storefront) ----------
 app.use('/api', publicRoutes);
+
+// ---------- SEO: real crawlable URLs for search/AI bots (sitemap.xml,
+// /collection/:slug, /product/:slug, /pack/:id) — read-only, reuses the
+// same catalog data as the API above. See routes/seo.js.
+app.use(seoRoutes);
 
 // ---------- Admin API ----------
 app.use('/api/admin', adminAuthRoutes);

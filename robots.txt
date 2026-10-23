@@ -3,4 +3,40 @@ Allow: /
 Disallow: /admin/
 Disallow: /api/
 
-Sitemap: https://veintunohouse.shop/sitemap.xml
+# Google's search crawler.
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+# Bing's search crawler.
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+# OpenAI — ChatGPT Search's live-browsing/citation crawler. Independent of
+# the GPTBot rule below: this one governs whether the site can show up as a
+# ChatGPT Search result, not whether content is used for model training.
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+# OpenAI — fetches a page only when a ChatGPT user's live browsing action
+# requests it directly.
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+# OpenAI — used for model training data collection, separate from search
+# visibility above. Left allowed by default since it doesn't affect how the
+# site is displayed to shoppers; block this block specifically if that
+# changes.
+User-agent: GPTBot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://www.veintunohouse.shop/sitemap.xml
