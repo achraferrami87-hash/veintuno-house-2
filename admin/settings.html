@@ -25,6 +25,11 @@
           <input name="announcementText" placeholder="Livraison offerte partout au Maroc">
         </div>
         <div class="admin-field">
+          <label>Messages supplémentaires (un par ligne, optionnel)</label>
+          <textarea name="announcementMessages" rows="3" placeholder="Paiement à la livraison&#10;Système de fidélité exclusif"></textarea>
+          <p class="admin-field-help">Défilent dans la même barre, à la suite du message principal. Laisse vide pour un seul message comme avant.</p>
+        </div>
+        <div class="admin-field">
           <label>Numéro ou lien WhatsApp</label>
           <input name="whatsappNumber" placeholder="ex. +212600000000 ou https://wa.me/212600000000">
           <p class="admin-field-help">Un numéro seul est automatiquement transformé en lien de discussion WhatsApp.</p>
@@ -93,6 +98,9 @@ async function load() {
   const settings = await adminApi('/settings');
   const form = document.getElementById('settingsForm');
   form.announcementText.value = settings.announcementText || '';
+  let announcementLines = [];
+  try { announcementLines = JSON.parse(settings.announcementMessages || '[]'); } catch (e) { announcementLines = []; }
+  form.announcementMessages.value = announcementLines.join('\n');
   form.whatsappNumber.value = settings.whatsappNumber || '';
   form.instagramLink.value = settings.instagramLink || '';
   form.perfumeDisclaimer.value = settings.perfumeDisclaimer || '';
@@ -124,6 +132,7 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
   const fd = new FormData(e.target);
   const payload = {
     announcementText: fd.get('announcementText'),
+    announcementMessages: String(fd.get('announcementMessages') || '').split('\n').map((x) => x.trim()).filter(Boolean),
     whatsappNumber: fd.get('whatsappNumber'),
     instagramLink: fd.get('instagramLink'),
     instagramQrImage: fd.get('instagramQrImage'),

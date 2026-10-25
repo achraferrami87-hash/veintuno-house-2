@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>FAQ</h1>
+        <p>Affichée en bas de chaque page (ou d'une page précise) et utilisée par le chat d'assistance. Glissez-déposez pour réordonner.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newBtn">+ Nouvelle question</button>
+      </div>
+    </div>
+
+    <div class="admin-card" id="formCard" style="margin-bottom:24px;max-width:640px;display:none;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;" id="formTitle">Nouvelle question</h2>
+      <form class="admin-form" id="faqForm">
+        <input type="hidden" name="id">
+        <div class="admin-field">
+          <label>Question</label>
+          <input name="question" required placeholder="Quels sont les délais de livraison ?">
+        </div>
+        <div class="admin-field">
+          <label>Réponse</label>
+          <textarea name="answer" rows="3" required></textarea>
+        </div>
+        <div class="admin-field">
+          <label>Catégorie (pour le chat d'assistance)</label>
+          <select name="category">
+            <option value="">— Aucune —</option>
+            <option value="Livraison">Livraison</option>
+            <option value="Paiement">Paiement</option>
+            <option value="Commandes">Commandes</option>
+            <option value="Produits">Produits</option>
+            <option value="Fidélité">Programme de fidélité</option>
+            <option value="Promotions">Promotions</option>
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Page (laisser vide pour l'afficher partout)</label>
+          <select name="page">
+            <option value="">— Toutes les pages —</option>
+            <option value="home">Accueil</option>
+            <option value="collection">Collections</option>
+            <option value="product">Fiches produit</option>
+            <option value="loyalty">Fidélité</option>
+            <option value="contact">Contact</option>
+          </select>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <input type="checkbox" name="isActive" checked style="width:auto;"> Active (visible sur le site)
+        </label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+          <button type="button" class="admin-btn" id="cancelBtn">Annuler</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th></th><th>Question</th><th>Catégorie</th><th>Page</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucune question pour l'instant.</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let items = [];
+const PAGE_LABELS = { home: 'Accueil', collection: 'Collections', product: 'Fiches produit', loyalty: 'Fidélité', contact: 'Contact' };
+
+function rowHTML(f) {
+  return `
+    <tr data-sortable-id="${f.id}" data-id="${f.id}" draggable="true">
+      <td class="drag-handle">⠿</td>
+      <td><strong>${f.question}</strong></td>
+      <td>${f.category || '—'}</td>
+      <td>${f.page ? (PAGE_LABELS[f.page] || f.page) : 'Toutes'}</td>
+      <td>${f.isActive ? 'Active' : 'Masquée'}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  items = await adminApi('/faq');
+  document.getElementById('body').innerHTML = items.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+}
+
+function showForm(item) {
+  const form = document.getElementById('faqForm');
+  form.reset();
+  form.id.value = item ? item.id : '';
+  form.question.value = item ? item.question : '';
+  form.answer.value = item ? item.answer : '';
+  form.category.value = item ? (item.category || '') : '';
+  form.page.value = item ? (item.page || '') : '';
+  form.isActive.checked = item ? item.isActive : true;
+  document.getElementById('formTitle').textContent = item ? 'Modifier la question' : 'Nouvelle question';
+  document.getElementById('formCard').style.display = 'block';
+}
+
+document.getElementById('newBtn').addEventListener('click', () => showForm(null));
+document.getElementById('cancelBtn').addEventListener('click', () => { document.getElementById('formCard').style.display = 'none'; });
+
+document.getElementById('faqForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const payload = {
+    question: fd.get('question'),
+    answer: fd.get('answer'),
+    category: fd.get('category') || null,
+    page: fd.get('page') || null,
+    isActive: fd.get('isActive') === 'on',
+  };
+  try {
+    if (id) await adminApi(`/faq/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    else await adminApi('/faq', { method: 'POST', body: JSON.stringify(payload) });
+    toast('Question enregistrée.');
+    document.getElementById('formCard').style.display = 'none';
+    await loadAll();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('body').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const item = items.find((f) => f.id === id);
+
+  if (btn.dataset.action === 'edit') showForm(item);
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer "${item.question}" ?`);
+    if (!ok) return;
+    try {
+      await adminApi(`/faq/${id}`, { method: 'DELETE' });
+      toast('Question supprimée.');
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+(async () => {
+  const admin = await initAdminPage('faq.html');
+  if (!admin) return;
+  await loadAll();
+  makeSortable(document.getElementById('body'), async (orderedIds) => {
+    await adminApi('/faq/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    toast('Ordre mis à jour.');
+    await loadAll();
+  });
+})();
+</script>
+</body>
+</html>

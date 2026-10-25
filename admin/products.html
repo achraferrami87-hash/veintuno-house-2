@@ -246,6 +246,10 @@ function openProductModal(product) {
               <div class="admin-field"><label>Début (optionnel)</label><input type="datetime-local" name="flashSaleStart" value="${isEdit && product.flashSaleStart ? toLocalDateTimeInput(product.flashSaleStart) : ''}"></div>
               <div class="admin-field"><label>Fin (optionnel — active un compte à rebours)</label><input type="datetime-local" name="flashSaleEnd" value="${isEdit && product.flashSaleEnd ? toLocalDateTimeInput(product.flashSaleEnd) : ''}"></div>
             </div>
+            <div class="admin-field">
+              <label>Campagne (optionnel — synchronise le compte à rebours avec d'autres produits)</label>
+              <select name="campaignId" id="campaignSelect"><option value="">— Aucune, dates ci-dessus —</option></select>
+            </div>
             <p class="admin-field-help">Le prix normal n'est jamais modifié — la promotion s'applique automatiquement pendant la période définie (ou en permanence si aucune date n'est fixée).</p>
           </div>
         </div>
@@ -418,6 +422,16 @@ function openProductModal(product) {
     document.getElementById('flashSaleFields').style.display = e.target.checked ? 'block' : 'none';
   });
 
+  adminApi('/campaigns').then((campaigns) => {
+    const select = document.getElementById('campaignSelect');
+    for (const c of campaigns) {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name;
+      if (isEdit && product.campaignId === c.id) opt.selected = true;
+      select.appendChild(opt);
+    }
+  }).catch(() => {});
+
   document.getElementById('productForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -439,6 +453,7 @@ function openProductModal(product) {
       flashSaleLabel: fd.get('flashSaleLabel') || null,
       flashSaleStart: fd.get('flashSaleStart') || null,
       flashSaleEnd: fd.get('flashSaleEnd') || null,
+      campaignId: fd.get('campaignId') || null,
     };
     try {
       if (isEdit) await adminApi(`/products/${product.id}`, { method: 'PUT', body: JSON.stringify(payload) });

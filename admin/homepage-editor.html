@@ -62,7 +62,7 @@
 
 <script src="js/admin-shared.js"></script>
 <script>
-const SECTION_TYPES = ['PACKS', 'BUNDLES', 'FEATURED_COLLECTIONS', 'FEATURED_PRODUCTS', 'BEST_SELLERS', 'NEW_ARRIVALS', 'TEXT_IMAGE', 'TESTIMONIALS', 'CLIENT_REVIEWS', 'PROMO_BANNER'];
+const SECTION_TYPES = ['PACKS', 'BUNDLES', 'FEATURED_COLLECTIONS', 'FEATURED_PRODUCTS', 'BEST_SELLERS', 'NEW_ARRIVALS', 'PRODUCT_SHOWCASE', 'TEXT_IMAGE', 'TESTIMONIALS', 'CLIENT_REVIEWS', 'PROMO_BANNER'];
 const CONFIG_TEMPLATES = {
   PACKS: { collectionSlug: 'parfums' },
   BUNDLES: {},
@@ -70,6 +70,7 @@ const CONFIG_TEMPLATES = {
   FEATURED_PRODUCTS: { productSlugs: ['atlas-noir', 'minuit-cuir'] },
   BEST_SELLERS: {},
   NEW_ARRIVALS: {},
+  PRODUCT_SHOWCASE: { productSlug: 'atlas-noir', imagePosition: 'right', body: '' },
   TEXT_IMAGE: { body: 'Votre texte ici...' },
   TESTIMONIALS: { items: [{ rating: 5, quote: 'Un avis client...', author: 'Nom, Ville' }] },
   CLIENT_REVIEWS: {},
@@ -361,7 +362,7 @@ function openSectionModal(section) {
         <div class="admin-field">
           <label>Contenu (JSON)</label>
           <textarea name="config" id="sectionConfig" style="min-height:140px;font-family:monospace;font-size:12px;">${isEdit ? JSON.stringify(section.config, null, 2) : JSON.stringify(CONFIG_TEMPLATES.PACKS, null, 2)}</textarea>
-          <p class="admin-field-help">Selon le type : productSlugs / collectionSlugs / collectionSlug / body / items / ctaText+ctaHref.</p>
+          <p class="admin-field-help">Selon le type : productSlugs / collectionSlugs / collectionSlug / body / items / ctaText+ctaHref. Pour PRODUCT_SHOWCASE : productSlug, imagePosition ("left" ou "right"), body (texte optionnel, sinon la description du produit est utilisée).</p>
         </div>
         <label class="admin-checkbox"><input type="checkbox" name="isActive" ${!isEdit || section.isActive ? 'checked' : ''}> Actif</label>
         <div class="admin-modal__actions">

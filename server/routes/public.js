@@ -9,13 +9,23 @@ const router = express.Router();
 // Flash Sale is never a permanent price change — `product.price` always stays
 // the real normal price; this only resolves what the customer sees/pays *now*.
 function getEffectivePrice(product) {
+  // A campaign's own start/end, when the product belongs to one, govern
+  // the countdown shown to the customer — so every product in the same
+  // named campaign counts down to the exact same moment. The campaign
+  // never sets a price itself: whether this product is actually on sale,
+  // and at what price, still comes entirely from its own flashSale* fields.
+  const campaignActive = product.campaign && product.campaign.isActive;
+  const countdownEnd = campaignActive ? product.campaign.endAt : product.flashSaleEnd;
+
   if (!product.flashSaleActive || product.flashSalePrice == null) {
-    return { price: product.price, onSale: false };
+    return { price: product.price, onSale: false, countdownEnd: null };
   }
   const now = new Date();
-  if (product.flashSaleStart && now < new Date(product.flashSaleStart)) return { price: product.price, onSale: false };
-  if (product.flashSaleEnd && now > new Date(product.flashSaleEnd)) return { price: product.price, onSale: false };
-  return { price: product.flashSalePrice, onSale: true };
+  const start = campaignActive ? product.campaign.startAt : product.flashSaleStart;
+  const end = campaignActive ? product.campaign.endAt : product.flashSaleEnd;
+  if (start && now < new Date(start)) return { price: product.price, onSale: false, countdownEnd: null };
+  if (end && now > new Date(end)) return { price: product.price, onSale: false, countdownEnd: null };
+  return { price: product.flashSalePrice, onSale: true, countdownEnd };
 }
 
 // A few of a collection's own product photos, used as small round "preview"
@@ -46,13 +56,18 @@ function parseImages(product) {
   if (genders.length === 0 && product.gender) genders = [product.gender];
   let filterOptionIds = [];
   try { filterOptionIds = JSON.parse(product.filterOptionIds || '[]'); } catch (e) { filterOptionIds = []; }
-  const { price: displayPrice, onSale } = getEffectivePrice(product);
+  const { price: displayPrice, onSale, countdownEnd } = getEffectivePrice(product);
   const characteristics = Array.isArray(product.characteristics)
     ? product.characteristics.map((c) => c.characteristic.name)
     : undefined;
   const parseNotes = (raw) => { try { return JSON.parse(raw || '[]'); } catch (e) { return []; } };
+  const discountPercent = onSale && product.price > 0
+    ? Math.round((1 - displayPrice / product.price) * 100)
+    : null;
   const out = {
     ...product, images, genders, filterOptionIds, displayPrice, onSale, originalPrice: product.price,
+    discountPercent, countdownEnd,
+    campaignName: product.campaign ? product.campaign.name : null,
     notesTopData: parseNotes(product.notesTopData),
     notesHeartData: parseNotes(product.notesHeartData),
     notesBaseData: parseNotes(product.notesBaseData),
@@ -111,6 +126,26 @@ router.get('/characteristics', async (req, res) => {
   res.json(characteristics);
 });
 
+// ---------- FAQ (storefront accordion + support chat, same data) ----------
+// ?page=home only returns global FAQs (page: null) plus that page's own —
+// omit ?page to get every active FAQ (used by the chat's full category list).
+router.get('/faq', async (req, res) => {
+  const where = { isActive: true };
+  if (req.query.page) where.OR = [{ page: null }, { page: req.query.page }];
+  const faqs = await prisma.faq.findMany({ where, orderBy: { position: 'asc' } });
+  res.json(faqs);
+});
+
+// ---------- Campaigns (currently-running ones only, for countdown display) ----------
+router.get('/campaigns/active', async (req, res) => {
+  const now = new Date();
+  const campaigns = await prisma.campaign.findMany({
+    where: { isActive: true, startAt: { lte: now }, endAt: { gte: now } },
+    orderBy: { endAt: 'asc' },
+  });
+  res.json(campaigns);
+});
+
 // ---------- Collections ----------
 router.get('/collections', async (req, res) => {
   const where = { isActive: true };
@@ -132,6 +167,7 @@ router.get('/collections/:slug', async (req, res) => {
   const [products, packs, bundles] = await Promise.all([
     prisma.product.findMany({
       where: { collectionId: collection.id, isActive: true },
+      include: { campaign: true },
       orderBy: { position: 'asc' },
     }),
     prisma.pack.findMany({
@@ -176,7 +212,7 @@ router.get('/products', async (req, res) => {
 
   const products = await prisma.product.findMany({
     where,
-    include: { collection: true, characteristics: { include: { characteristic: true } } },
+    include: { collection: true, characteristics: { include: { characteristic: true } }, campaign: true },
     orderBy: { position: 'asc' },
   });
   res.json(products.map(parseImages));
@@ -185,7 +221,7 @@ router.get('/products', async (req, res) => {
 router.get('/products/:slug', async (req, res) => {
   const product = await prisma.product.findUnique({
     where: { slug: req.params.slug },
-    include: { collection: true, characteristics: { include: { characteristic: true } } },
+    include: { collection: true, characteristics: { include: { characteristic: true } }, campaign: true },
   });
   if (!product || !product.isActive) return res.status(404).json({ error: 'Produit introuvable.' });
   res.json(parseImages(product));
@@ -313,16 +349,16 @@ router.get('/homepage', async (req, res) => {
       try { config = JSON.parse(section.config || '{}'); } catch (e) { config = {}; }
 
       if (section.type === 'FEATURED_PRODUCTS' && Array.isArray(config.productSlugs)) {
-        const products = await prisma.product.findMany({ where: { slug: { in: config.productSlugs }, isActive: true }, include: { collection: true } });
+        const products = await prisma.product.findMany({ where: { slug: { in: config.productSlugs }, isActive: true }, include: { collection: true, campaign: true } });
         const ordered = config.productSlugs.map((s) => products.find((p) => p.slug === s)).filter(Boolean);
         config = { ...config, products: ordered.map(parseImages) };
       }
       if (section.type === 'BEST_SELLERS') {
-        const products = await prisma.product.findMany({ where: { isBestSeller: true, isActive: true }, include: { collection: true }, take: 8 });
+        const products = await prisma.product.findMany({ where: { isBestSeller: true, isActive: true }, include: { collection: true, campaign: true }, take: 8 });
         config = { ...config, products: products.map(parseImages) };
       }
       if (section.type === 'NEW_ARRIVALS') {
-        const products = await prisma.product.findMany({ where: { isNew: true, isActive: true }, include: { collection: true }, take: 8 });
+        const products = await prisma.product.findMany({ where: { isNew: true, isActive: true }, include: { collection: true, campaign: true }, take: 8 });
         config = { ...config, products: products.map(parseImages) };
       }
       if (section.type === 'FEATURED_COLLECTIONS' && Array.isArray(config.collectionSlugs)) {
@@ -350,6 +386,10 @@ router.get('/homepage', async (req, res) => {
           const packs = await prisma.pack.findMany({ where: { collectionId: col.id, isActive: true }, orderBy: { position: 'asc' } });
           config = { ...config, packs, collectionSlug: col.slug };
         }
+      }
+      if (section.type === 'PRODUCT_SHOWCASE' && config.productSlug) {
+        const product = await prisma.product.findUnique({ where: { slug: config.productSlug }, include: { collection: true, campaign: true } });
+        if (product && product.isActive) config = { ...config, product: parseImages(product) };
       }
       if (section.type === 'CLIENT_REVIEWS') {
         const reviews = await prisma.review.findMany({

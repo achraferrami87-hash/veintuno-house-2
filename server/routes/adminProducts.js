@@ -153,6 +153,7 @@ router.post('/', async (req, res) => {
       flashSaleStart: body.flashSaleStart ? new Date(body.flashSaleStart) : null,
       flashSaleEnd: body.flashSaleEnd ? new Date(body.flashSaleEnd) : null,
       flashSaleLabel: body.flashSaleLabel || null,
+      campaignId: body.campaignId || null,
     },
   });
   await setProductCharacteristics(product.id, body.characteristicIds);
@@ -188,6 +189,7 @@ router.put('/:id', async (req, res) => {
   if (body.flashSaleStart !== undefined) data.flashSaleStart = body.flashSaleStart ? new Date(body.flashSaleStart) : null;
   if (body.flashSaleEnd !== undefined) data.flashSaleEnd = body.flashSaleEnd ? new Date(body.flashSaleEnd) : null;
   if (body.flashSaleLabel !== undefined) data.flashSaleLabel = body.flashSaleLabel || null;
+  if (body.campaignId !== undefined) data.campaignId = body.campaignId || null;
   if (body.images !== undefined) data.images = JSON.stringify(body.images);
   if (body.name && body.regenerateSlug) data.slug = await uniqueSlug(body.name, req.params.id);
 

@@ -128,6 +128,16 @@ model Product {
   flashSaleEnd    DateTime?
   flashSaleLabel  String?
 
+  // Optional link to a named, multi-product Campaign (e.g. "RAMADAN SALE").
+  // When set, the storefront countdown reads the campaign's shared
+  // start/end instead of this product's own flashSale* dates, so every
+  // product in the same campaign counts down in sync. The product's own
+  // flashSaleActive/flashSalePrice/flashSaleLabel still decide the actual
+  // discounted price shown — purely additive, nothing changes for a
+  // product with no campaignId.
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+
   collectionId String
   collection   Collection @relation(fields: [collectionId], references: [id])
 
@@ -645,7 +655,61 @@ model SiteSettings {
   perfumeDisclaimer String   @default("Inspiré des plus grands parfums — non affilié aux marques citées.")
   defaultTheme      String   @default("clair") // clair | sombre — the visitor's own choice (localStorage) still overrides this
   announcementText  String   @default("Livraison offerte partout au Maroc")
+  // Optional JSON array of extra rotating messages shown alongside
+  // announcementText. Empty by default — existing single-message behavior
+  // is unchanged until the admin adds messages here.
+  announcementMessages String @default("[]")
   trustSignals      String   @default("[]") // JSON array of admin-entered trust statements
   metaPixelId       String?  // Meta (Facebook) Pixel ID — the storefront only loads the Pixel script when this is set
   updatedAt         DateTime @updatedAt
+}
+
+// ===========================
+// PROMOTIONAL CAMPAIGNS (named, multi-product sales — "FRESH SALE",
+// "RAMADAN SALE", etc.) — a thin grouping layer on top of the existing
+// per-product Flash Sale fields. A campaign itself never sets a price; it
+// just gives several products' flash sales a shared name, banner and
+// countdown so they run in sync, and tells the storefront which sections
+// are allowed to surface that countdown.
+// ===========================
+model Campaign {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  bannerImage String?
+  startAt     DateTime
+  endAt       DateTime
+  isActive    Boolean   @default(true)
+  // Where this campaign's countdown may appear — admin-controlled, all
+  // default true so existing behavior (show everywhere) is preserved.
+  showOnHomepage     Boolean @default(true)
+  showOnProductCards Boolean @default(true)
+  showOnProductPage  Boolean @default(true)
+  showOnBundles      Boolean @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+}
+
+// ===========================
+// FAQ — one flat table reused in two places: the storefront accordion
+// (section-scoped via `page`, or global when `page` is null) and the
+// guided support chat (grouped by `category`). No separate chat-content
+// table — same admin-entered Q&A powers both, per the cost-optimization
+// rule against duplicate tables.
+// ===========================
+model Faq {
+  id       String  @id @default(cuid())
+  question String
+  answer   String
+  category String? // e.g. Livraison, Paiement, Commandes, Produits, Fidélité, Promotions — used by the chat's category menu
+  // null = shown on every page's FAQ section; otherwise a page key like
+  // "home" | "product" | "collection" | "loyalty" | "contact" restricts it
+  // to that page only.
+  page     String?
+  position Int     @default(0)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

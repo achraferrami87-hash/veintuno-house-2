@@ -117,11 +117,61 @@ function productMediaHTML(p) {
 
 function priceHTML(p, variant) {
   if (!p.onSale) return `<p class="product-detail__price ${variant === 'card' ? 'product-card__price' : ''}">${p.price} MAD</p>`;
+  const percentHTML = p.discountPercent ? `<span class="price-discount-percent">-${p.discountPercent}%</span>` : '';
   return `
     <p class="${variant === 'card' ? 'product-card__price product-card__price--flash' : 'product-detail__price product-detail__price--flash'}">
       <span class="price-original">${p.originalPrice} MAD</span>
       <span class="price-sale">${p.displayPrice} MAD</span>
+      ${percentHTML}
     </p>`;
+}
+
+// Shared escape for admin-entered text rendered as HTML (announcement
+// messages, FAQ answers, etc.) — avoids a stray "&" or "<" breaking markup.
+function escapeHtmlText(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+
+// ===========================
+// FAQ — one accordion, reused at the bottom of every main page. `pageKey`
+// scopes which page-specific questions join the global (page: null) ones;
+// mounted into a per-page <div id="faqSection-<pageKey>"> that already
+// exists in index.html. Renders nothing (stays hidden) when there are no
+// active questions, so an empty FAQ never shows as an empty shell.
+// ===========================
+const faqCache = new Map();
+async function renderFaqSection(pageKey) {
+  const mount = document.getElementById(`faqSection-${pageKey}`);
+  if (!mount) return;
+  let faqs = faqCache.get(pageKey);
+  if (!faqs) {
+    try { faqs = await api(`/faq?page=${encodeURIComponent(pageKey)}`); } catch (e) { faqs = []; }
+    faqCache.set(pageKey, faqs);
+  }
+  if (!faqs.length) { mount.hidden = true; mount.innerHTML = ''; return; }
+  mount.innerHTML = `
+    <p class="section__eyebrow">Besoin d'aide ?</p>
+    <h2 class="faq-section__title">QUESTIONS</h2>
+    <div class="faq-accordion">
+      ${faqs.map((f, i) => `
+        <div class="faq-item">
+          <button type="button" class="faq-item__question" aria-expanded="false" data-index="${i}">
+            <span>${escapeHtmlText(f.question)}</span>
+            <span class="faq-item__icon">+</span>
+          </button>
+          <div class="faq-item__answer"><p>${escapeHtmlText(f.answer)}</p></div>
+        </div>`).join('')}
+    </div>`;
+  mount.hidden = false;
+  mount.querySelectorAll('.faq-item__question').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.faq-item');
+      const open = item.classList.toggle('is-open');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
 }
 
 // Editorial touch on the grid card title — italicize the first word only
@@ -1110,6 +1160,28 @@ function textImageSectionHTML(section) {
     </section>`;
 }
 
+function productShowcaseSectionHTML(section) {
+  const p = section.config.product;
+  if (!p) return '';
+  const reversed = section.config.imagePosition === 'left';
+  const bodyText = section.config.body || p.description || '';
+  return `
+    <section class="product-showcase${reversed ? ' product-showcase--reverse' : ''}">
+      <div class="container product-showcase__grid">
+        <div class="product-showcase__media">
+          <img src="${p.images[0] || ''}" alt="${escapeHtmlText(p.name)}" loading="lazy">
+        </div>
+        <div class="product-showcase__content">
+          <p class="section__eyebrow">${section.title || 'En vedette'}</p>
+          <h2 class="section__title">${section.subtitle || escapeHtmlText(p.name)}</h2>
+          ${bodyText ? `<p class="product-showcase__text">${escapeHtmlText(bodyText)}</p>` : ''}
+          ${priceHTML(p)}
+          <a href="#product/${p.slug}" class="btn btn--gold product-showcase__cta">Découvrir</a>
+        </div>
+      </div>
+    </section>`;
+}
+
 function testimonialsSectionHTML(section) {
   const items = section.config.items || [];
   return `
@@ -1152,15 +1224,62 @@ function bundleCardHTML(b) {
 function bundlesSectionHTML(section) {
   const bundles = section.config.bundles || [];
   if (bundles.length === 0) return '';
+  const items = bundles.map((b, i) => {
+    const content = b.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+    return `
+      <button type="button" class="bundle-order__item${i === 0 ? ' is-selected' : ''}" data-bundle-pick
+        data-id="${b.id}" data-name="${escapeHtmlText(b.name)}" data-price="${b.price}" data-detail="${escapeHtmlText(content)}">
+        ${b.image ? `<img src="${b.image}" alt="${escapeHtmlText(b.name)}" class="bundle-order__item-img" loading="lazy">` : ''}
+        <span class="bundle-order__item-info">
+          <strong>${escapeHtmlText(b.name)}</strong>
+          <span class="bundle-order__item-detail">${escapeHtmlText(content)}</span>
+          <span class="bundle-order__item-price">${b.price} MAD</span>
+        </span>
+        <span class="bundle-order__item-check" aria-hidden="true"></span>
+      </button>`;
+  }).join('');
+  const first = bundles[0];
+  const firstContent = first.items.map((it) => `${it.product.name}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ');
+
   return `
-    <section class="products">
-      <div class="container">
-        <p class="section__eyebrow">${section.title || 'Offres groupées'}</p>
-        <h2 class="section__title">${section.subtitle || 'Nos Bundles'}</h2>
-        <div class="products__grid">${bundles.map(bundleCardHTML).join('')}</div>
+    <section class="bundle-order">
+      <div class="container bundle-order__grid">
+        <div class="bundle-order__intro">
+          <p class="section__eyebrow">${section.title || 'Offres groupées'}</p>
+          <h2 class="section__title">${section.subtitle || 'Commandez votre bundle en 3 étapes'}</h2>
+          <ol class="bundle-order__steps">
+            <li><span class="bundle-order__step-num">1</span><div><strong>Choisissez votre bundle</strong><p>Sélectionnez l'offre ci-contre et validez votre commande.</p></div></li>
+            <li><span class="bundle-order__step-num">2</span><div><strong>Confirmation par WhatsApp</strong><p>Nous vous contactons rapidement pour confirmer votre commande.</p></div></li>
+            <li><span class="bundle-order__step-num">3</span><div><strong>Réception & paiement à la livraison</strong><p>Vous recevez votre colis et payez à la livraison.</p></div></li>
+          </ol>
+        </div>
+        <div class="bundle-order__card">
+          <div class="bundle-order__list" id="bundleOrderList-${section.id}">${items}</div>
+          <button type="button" class="btn btn--gold btn--full js-add-bundle" id="bundleOrderCta-${section.id}"
+            data-id="${first.id}" data-name="${escapeHtmlText(first.name)}" data-price="${first.price}" data-detail="${escapeHtmlText(firstContent)}">
+            Commander ce bundle →
+          </button>
+          <p class="bundle-order__cod">Paiement à la livraison</p>
+        </div>
       </div>
     </section>`;
 }
+
+// Clicking a bundle in the ordering card re-points the single CTA button
+// at that bundle (id/name/price/detail) instead of adding every click to
+// the cart — only the final button press actually adds one.
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-bundle-pick]');
+  if (!pick) return;
+  const list = pick.closest('.bundle-order__list');
+  list.querySelectorAll('.bundle-order__item').forEach((el) => el.classList.remove('is-selected'));
+  pick.classList.add('is-selected');
+  const cta = list.closest('.bundle-order__card').querySelector('.js-add-bundle');
+  cta.dataset.id = pick.dataset.id;
+  cta.dataset.name = pick.dataset.name;
+  cta.dataset.price = pick.dataset.price;
+  cta.dataset.detail = pick.dataset.detail;
+});
 
 // Shared pack card: used on the homepage packs section and on each
 // collection's detail page. `image`/`tagline`/`blurb` are optional and
@@ -1282,19 +1401,23 @@ function clientReviewCardHTML(r) {
 }
 
 function clientReviewsSectionHTML(section) {
-  const photos = (section.config.reviews || []).filter((r) => r.customerPhoto);
-  if (!photos.length) return '';
+  const reviews = (section.config.reviews || []).filter((r) => r.customerPhoto);
+  if (!reviews.length) return '';
+  const slides = reviews.map((r) => `
+    <div class="center-carousel__slide">
+      <article class="client-review-card">
+        <img class="client-review-card__photo" src="${r.customerPhoto}" alt="${escapeHtmlText(r.customerName || 'Avis client')}" loading="lazy" decoding="async">
+        ${r.rating ? `<div class="client-review-card__stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div>` : ''}
+        ${r.text ? `<p class="client-review-card__text">« ${escapeHtmlText(r.text)} »</p>` : ''}
+        ${r.customerName ? `<p class="client-review-card__name">${escapeHtmlText(r.customerName)}${r.product ? ` — ${escapeHtmlText(r.product.name)}` : ''}</p>` : ''}
+      </article>
+    </div>`).join('');
   return `
     <section class="review-gallery">
       <div class="container">
         <p class="section__eyebrow">${section.title || 'Avis clients'}</p>
         <h2 class="section__title">${section.subtitle || 'Ce que nos clients disent'}</h2>
-        <div class="review-gallery__grid" data-zoom-group>
-          ${photos.map((r) => `
-            <button type="button" class="review-gallery__item js-zoom-image" data-src="${r.customerPhoto}" aria-label="Agrandir l'avis client">
-              <img src="${r.customerPhoto}" alt="Avis client" loading="lazy" decoding="async">
-            </button>`).join('')}
-        </div>
+        ${centerCarouselHTML(`carousel-${section.id}`, slides)}
       </div>
     </section>`;
 }
@@ -1377,6 +1500,7 @@ const SECTION_RENDERERS = {
   BEST_SELLERS: productsSectionHTML,
   NEW_ARRIVALS: productsSectionHTML,
   BUNDLES: bundlesSectionHTML,
+  PRODUCT_SHOWCASE: productShowcaseSectionHTML,
   TEXT_IMAGE: textImageSectionHTML,
   TESTIMONIALS: testimonialsSectionHTML,
   PROMO_BANNER: promoBannerSectionHTML,
@@ -1386,10 +1510,84 @@ const SECTION_RENDERERS = {
 
 function videoShowcaseCardHTML(v) {
   return `
-    <div class="video-showcase__card">
-      <video class="video-showcase__video" src="${v.videoUrl}" ${v.posterImage ? `poster="${v.posterImage}"` : ''} muted loop playsinline preload="metadata" controls></video>
-      ${v.title ? `<p class="video-showcase__caption">${v.title}</p>` : ''}
+    <div class="center-carousel__slide">
+      <div class="video-showcase__card">
+        <video class="video-showcase__video" src="${v.videoUrl}" ${v.posterImage ? `poster="${v.posterImage}"` : ''} muted loop playsinline preload="metadata" controls></video>
+        ${v.title ? `<p class="video-showcase__caption">${escapeHtmlText(v.title)}</p>` : ''}
+      </div>
     </div>`;
+}
+
+// ===========================
+// CENTER CAROUSEL — shared by the reviews and video-showcase sections.
+// Renders every slide (so no extra network/DOM work vs. the old grid —
+// same elements, just a different layout), slides the track so the
+// current one sits centered and enlarged, side ones stay small. Swipe on
+// touch, arrows on desktop, autoplay paused on hover/touch/interaction.
+// Only a handful of homepage slides ever exist, so re-measuring on each
+// move is cheap — no virtualization needed.
+// ===========================
+function centerCarouselHTML(id, slidesHTML) {
+  return `
+    <div class="center-carousel" id="${id}">
+      <button type="button" class="center-carousel__arrow center-carousel__arrow--prev" aria-label="Précédent">
+        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="center-carousel__viewport">
+        <div class="center-carousel__track">${slidesHTML}</div>
+      </div>
+      <button type="button" class="center-carousel__arrow center-carousel__arrow--next" aria-label="Suivant">
+        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>`;
+}
+
+function initCenterCarousel(id, { autoplayMs = 4500 } = {}) {
+  const root = document.getElementById(id);
+  if (!root) return;
+  const viewport = root.querySelector('.center-carousel__viewport');
+  const track = root.querySelector('.center-carousel__track');
+  const slides = Array.from(track.children);
+  if (slides.length < 2) { if (slides[0]) slides[0].classList.add('is-center'); return; }
+  let current = 0;
+  let timer = null;
+
+  function position() {
+    slides.forEach((s, i) => s.classList.toggle('is-center', i === current));
+    const slide = slides[current];
+    const targetCenter = viewport.clientWidth / 2;
+    const slideCenter = slide.offsetLeft + slide.offsetWidth / 2;
+    track.style.transform = `translateX(${targetCenter - slideCenter}px)`;
+  }
+  function goTo(i) { current = (i + slides.length) % slides.length; position(); }
+  function next() { goTo(current + 1); }
+  function prev() { goTo(current - 1); }
+  function stopAutoplay() { if (timer) clearInterval(timer); }
+  function startAutoplay() { stopAutoplay(); timer = setInterval(next, autoplayMs); }
+
+  // A playing video must not keep playing once it's no longer centered.
+  function pauseOffCenterVideos() {
+    slides.forEach((s, i) => { if (i !== current) s.querySelector('video')?.pause(); });
+  }
+
+  root.querySelector('.center-carousel__arrow--prev').addEventListener('click', () => { prev(); pauseOffCenterVideos(); startAutoplay(); });
+  root.querySelector('.center-carousel__arrow--next').addEventListener('click', () => { next(); pauseOffCenterVideos(); startAutoplay(); });
+  root.addEventListener('mouseenter', stopAutoplay);
+  root.addEventListener('mouseleave', startAutoplay);
+
+  let touchStartX = null;
+  viewport.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; stopAutoplay(); }, { passive: true });
+  viewport.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(delta) > 40) { delta > 0 ? prev() : next(); pauseOffCenterVideos(); }
+    touchStartX = null;
+    startAutoplay();
+  }, { passive: true });
+
+  window.addEventListener('resize', position);
+  position();
+  startAutoplay();
 }
 
 async function initHomepage() {
@@ -1407,9 +1605,13 @@ async function initHomepage() {
     const videoSection = document.getElementById('videoShowcaseSection');
     const videoGrid = document.getElementById('videoShowcaseGrid');
     if (videoSection && videoGrid && Array.isArray(data.videos) && data.videos.length) {
-      videoGrid.innerHTML = data.videos.map(videoShowcaseCardHTML).join('');
+      videoGrid.innerHTML = centerCarouselHTML('videoShowcaseCarousel', data.videos.map(videoShowcaseCardHTML).join(''));
       videoSection.hidden = false;
+      initCenterCarousel('videoShowcaseCarousel');
     }
+
+    // Every reviews/testimonial carousel the sections above just rendered.
+    document.querySelectorAll('#homepageSections .center-carousel').forEach((el) => initCenterCarousel(el.id));
   } catch (e) { /* homepage will just show hero-less shell */ }
 
   initRevealAnimations();
@@ -2213,7 +2415,7 @@ function productDetailBodyHTML(p, compact) {
         ${priceHTML(p, 'detail')}
         ${p.volume ? `<span class="product-detail__volume">${p.volume}</span>` : ''}
       </div>
-      ${p.onSale && p.flashSaleEnd ? `<div class="flash-countdown js-flash-countdown" data-end="${p.flashSaleEnd}"></div>` : ''}
+      ${p.onSale && p.countdownEnd ? `<div class="flash-countdown js-flash-countdown" data-end="${p.countdownEnd}"></div>` : ''}
       <p class="product-detail__availability ${p.stock > 0 ? 'is-available' : 'is-unavailable'}">${p.stock > 0 ? 'En stock' : 'Rupture de stock'}</p>
       ${p.collection && p.collection.slug === 'gels-douche' ? '<p class="product-detail__delivery-note">Livraison : 30 MAD si le panier contient un seul gel douche (hors pack). Offerte dès 2 gels douche ou avec un pack.</p>' : ''}
       ${p.description ? `<p class="product-detail__description">${p.description}</p>` : ''}
@@ -2644,9 +2846,27 @@ async function initAnnouncementBar() {
   const bar = document.getElementById('announcementBar');
   if (!bar) return;
   const settings = await getSiteSettings();
-  if (settings && settings.announcementText) {
-    bar.querySelectorAll('.topbar__text').forEach((el) => { el.textContent = settings.announcementText; });
-  }
+  if (!settings) return;
+
+  let extra = [];
+  try { extra = JSON.parse(settings.announcementMessages || '[]'); } catch (e) { extra = []; }
+  const messages = [settings.announcementText, ...extra].filter(Boolean);
+  if (!messages.length) return;
+
+  const icon = '<svg class="topbar__icon" viewBox="0 0 24 24" width="14" height="14"><path d="M3 7h11v9H3zM14 11h4l3 3v2h-7z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><circle cx="7" cy="18" r="1.6" fill="currentColor"/><circle cx="17" cy="18" r="1.6" fill="currentColor"/></svg>';
+  // Same seamless-marquee trick as the original static markup: the whole
+  // message sequence rendered twice (second copy aria-hidden) so a -50%
+  // slide loops invisibly, now just driven by however many messages the
+  // admin configured instead of a hardcoded single one.
+  const itemHTML = (hidden) => messages.map((text) => `
+    <div class="topbar__item"${hidden ? ' aria-hidden="true"' : ''}>
+      ${icon}
+      <span class="topbar__text">${escapeHtmlText(text)}</span>
+      <a href="#collections" class="topbar__cta"${hidden ? ' tabindex="-1"' : ''}>Achetez maintenant →</a>
+    </div>`).join('');
+
+  const track = bar.querySelector('.topbar__track');
+  if (track) track.innerHTML = itemHTML(false) + itemHTML(true);
 }
 
 // Floating WhatsApp button — visible on both desktop and mobile once a
@@ -2661,6 +2881,81 @@ async function initWhatsappFloat() {
   if (!href) return;
   btn.href = href;
   btn.hidden = false;
+}
+
+// ===========================
+// SUPPORT CHAT — rules-based FAQ browser beside the WhatsApp button.
+// No AI/generation: it only ever shows admin-entered FAQ answers (reusing
+// the same Faq data as renderFaqSection), with a WhatsApp fallback for
+// anything not covered. One fetch on boot, cached — no polling.
+// ===========================
+async function initSupportChat() {
+  const floatBtn = document.getElementById('supportChatFloat');
+  const panel = document.getElementById('supportChatPanel');
+  const body = document.getElementById('supportChatBody');
+  const closeBtn = document.getElementById('supportChatClose');
+  if (!floatBtn || !panel || !body) return;
+
+  let faqs = [];
+  try { faqs = await api('/faq'); } catch (e) { return; }
+  if (!Array.isArray(faqs) || faqs.length === 0) return;
+
+  const settings = await getSiteSettings();
+  const waHref = settings && whatsappHref(settings.whatsappNumber);
+  const waFooterHTML = waHref
+    ? `<a href="${waHref}" target="_blank" rel="noopener" class="support-chat-panel__wa">Pas trouvé votre réponse ? Discuter sur WhatsApp →</a>`
+    : '';
+
+  function listHTML() {
+    const categories = [...new Set(faqs.map((f) => f.category).filter(Boolean))];
+    const grouped = categories.length > 1;
+    const faqBtn = (f) => `<button type="button" class="support-chat-item" data-id="${f.id}">${escapeHtmlText(f.question)}</button>`;
+    const listBody = grouped
+      ? categories.map((cat) => `
+          <p class="support-chat-category">${escapeHtmlText(cat)}</p>
+          ${faqs.filter((f) => f.category === cat).map(faqBtn).join('')}`).join('')
+        + faqs.filter((f) => !f.category).map(faqBtn).join('')
+      : faqs.map(faqBtn).join('');
+    return `
+      <p class="support-chat-intro">Bonjour ! Choisissez une question ci-dessous :</p>
+      <div class="support-chat-list">${listBody}</div>
+      ${waFooterHTML}`;
+  }
+
+  function answerHTML(faq) {
+    return `
+      <button type="button" class="support-chat-back" id="supportChatBack">← Autres questions</button>
+      <div class="support-chat-qa">
+        <p class="support-chat-qa__q">${escapeHtmlText(faq.question)}</p>
+        <p class="support-chat-qa__a">${escapeHtmlText(faq.answer)}</p>
+      </div>
+      ${waFooterHTML}`;
+  }
+
+  function showList() {
+    body.innerHTML = listHTML();
+    body.querySelectorAll('.support-chat-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const faq = faqs.find((f) => f.id === btn.dataset.id);
+        if (faq) showAnswer(faq);
+      });
+    });
+  }
+
+  function showAnswer(faq) {
+    body.innerHTML = answerHTML(faq);
+    document.getElementById('supportChatBack').addEventListener('click', showList);
+  }
+
+  function togglePanel(open) {
+    panel.hidden = !open;
+    floatBtn.setAttribute('aria-expanded', String(open));
+    if (open) showList();
+  }
+
+  floatBtn.addEventListener('click', () => togglePanel(panel.hidden));
+  closeBtn.addEventListener('click', () => togglePanel(false));
+  floatBtn.hidden = false;
 }
 
 // ===========================
@@ -2813,7 +3108,7 @@ async function initLoyaltyPage() {
 
       const progressHTML = data.nextReward ? `
         <div class="loyalty-progress">
-          <div class="loyalty-progress__labels"><span>${data.balance} points</span><span>${data.nextReward.pointsRequired} points</span></div>
+          <div class="loyalty-progress__labels"><span>0</span><span>${data.nextReward.pointsRequired} points</span></div>
           <div class="loyalty-progress__bar"><div class="loyalty-progress__fill" id="loyaltyProgressFill" data-target="${progressPct}"></div></div>
           <p class="loyalty-result__next">Encore ${(data.nextReward.pointsRequired - data.balance).toFixed(2)} point(s) pour débloquer : ${data.nextReward.name}</p>
         </div>` : '';
@@ -2829,11 +3124,18 @@ async function initLoyaltyPage() {
         </div>` : '';
 
       resultEl.innerHTML = `
-        <div class="loyalty-result__balance">
-          <p class="section__eyebrow">Bonjour ${data.fullName.split(' ')[0]}</p>
-          <p class="loyalty-result__points">${data.balance} <span>points</span></p>
+        <div class="loyalty-digital-card">
+          <div class="loyalty-digital-card__top">
+            <span class="loyalty-digital-card__brand">VEINTUNO HOUSE</span>
+            <span class="loyalty-digital-card__chip" aria-hidden="true"></span>
+          </div>
+          <div class="loyalty-result__balance">
+            <p class="section__eyebrow">Bonjour ${escapeHtmlText(data.fullName.split(' ')[0])}</p>
+            <p class="loyalty-result__points">${data.balance} <span>points</span></p>
+          </div>
+          ${progressHTML}
+          <p class="loyalty-digital-card__member">Membre fidélité</p>
         </div>
-        ${progressHTML}
         ${celebrationHTML}
         ${!hasCelebration ? `
         <div class="loyalty-result__rewards">
@@ -3291,11 +3593,13 @@ function initRevealAnimations() {
       viewDetail.hidden = false;
       window.scrollTo(0, 0);
       await renderCollectionDetail(slug);
+      renderFaqSection('collection');
     } else if (hash.startsWith('product/')) {
       const slug = hash.split('/')[1];
       viewProduct.hidden = false;
       window.scrollTo(0, 0);
       await renderProductDetail(slug);
+      renderFaqSection('product');
     } else if (hash.startsWith('bundle/')) {
       const slug = hash.split('/')[1];
       viewBundle.hidden = false;
@@ -3330,11 +3634,14 @@ function initRevealAnimations() {
     } else if (hash === 'loyalty') {
       viewLoyalty.hidden = false;
       window.scrollTo(0, 0);
+      renderFaqSection('loyalty');
     } else if (hash === 'contact') {
       viewContact.hidden = false;
       window.scrollTo(0, 0);
+      renderFaqSection('contact');
     } else {
       viewHome.hidden = false;
+      renderFaqSection('home');
     }
   }
 
@@ -3597,6 +3904,7 @@ initContactPage();
 initThemeSwitch();
 initAnnouncementBar();
 initWhatsappFloat();
+initSupportChat();
 // Real recent orders only (product, quantity, time) — no customer names.
 const PURCHASE_NOTICE = { firstDelayMs: 4000, intervalMs: 10000, visibleMs: 5000 };
 

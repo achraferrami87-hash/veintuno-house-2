@@ -90,6 +90,8 @@ const NAV_ITEMS = [
   { href: 'navbar.html', label: 'Navbar', icon: 'M4 6h16M4 12h16M4 18h16' },
   { href: 'loyalty.html', label: 'Fidélité', icon: 'M12 2 15 8.5 22 9.3 17 14 18.3 21 12 17.5 5.7 21 7 14 2 9.3 9 8.5 12 2Z' },
   { href: 'reviews.html', label: 'Avis clients', icon: 'M12 17.3 6.2 21l1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.8 4.9 1.6 6.9z' },
+  { href: 'campaigns.html', label: 'Campagnes', icon: 'M12 2 2 7v6c0 5.5 3.8 9.7 10 11 6.2-1.3 10-5.5 10-11V7l-10-5Z' },
+  { href: 'faq.html', label: 'FAQ', icon: 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 5M12 17h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z' },
   { href: 'characteristics.html', label: 'Caractéristiques', icon: 'M4 4h16v4H4V4Zm0 6h10v4H4v-4Zm0 6h16v4H4v-4Z' },
   { href: 'quiz.html', label: 'Find Your Scent', icon: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.5 1 1.3 1 2.1V16h6v-.4c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 3Z' },
   { href: 'settings.html', label: 'Réglages', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 2h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6a7.4 7.4 0 0 0 .1-1.2Z' },

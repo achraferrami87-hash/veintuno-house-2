@@ -134,6 +134,8 @@ try {
     </div>
   </section>
 
+  <div id="faqSection-home" class="faq-section" hidden></div>
+
 </main>
 
 <!-- COLLECTIONS (page) -->
@@ -216,6 +218,7 @@ try {
     <p class="admin-field-help compose-empty-msg" id="collectionDetailEmptyMsg" hidden>Aucun résultat.</p>
 
     <div class="products__grid" id="collectionDetailGrid"></div>
+    <div id="faqSection-collection" class="faq-section" hidden></div>
   </div>
 </section>
 
@@ -223,6 +226,9 @@ try {
 <section class="view product-detail" id="view-product-detail" hidden>
   <div class="container product-detail__layout" id="productDetailLayout">
     <div class="product-detail__visual" id="productDetailVisual"></div>
+  </div>
+  <div class="container">
+    <div id="faqSection-product" class="faq-section" hidden></div>
   </div>
 </section>
 
@@ -266,6 +272,9 @@ try {
       <div id="loyaltyResult" class="loyalty-result" hidden></div>
     </div>
   </div>
+  <div class="container">
+    <div id="faqSection-loyalty" class="faq-section" hidden></div>
+  </div>
 </section>
 
 <!-- CONTACT (page) -->
@@ -274,6 +283,7 @@ try {
     <p class="section__eyebrow">Contact</p>
     <h2 class="section__title">Restons en contact</h2>
     <div class="contact-grid" id="contactGrid"></div>
+    <div id="faqSection-contact" class="faq-section" hidden></div>
   </div>
 </section>
 
@@ -500,6 +510,18 @@ try {
 <a href="#" target="_blank" rel="noopener" class="whatsapp-float" id="whatsappFloat" aria-label="Discuter sur WhatsApp" hidden>
   <svg viewBox="0 0 448 512" aria-hidden="true"><path fill="currentColor" d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 110.9L8 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-75.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-70 18.4 18.7-68.2-4.4-7a184.2 184.2 0 0 1-28.2-98.1c0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1a183.6 183.6 0 0 1 54.1 130.5c-.1 101.8-82.9 184.5-184.5 184.5zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.7-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.6-9.7-1.5-2.8-13.1-31.6-17.9-43.2-4.7-11.3-9.6-9.8-13.1-9.9-3.4-.2-7.3-.2-11.2-.2-3.9 0-10.2 1.5-15.6 7.3-5.4 5.8-20.6 20.2-20.6 49.2s21.1 57.1 24 61c2.9 3.9 39.9 60.9 96.7 82.9 48.1 18.6 57.9 14.9 68.4 13.9 10.5-.9 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.4-2.3-5.1-3.7-10.6-6.4z"/></svg>
 </a>
+
+<!-- SUPPORT CHAT (rules-based FAQ, no AI) — only shown once FAQs exist. -->
+<button type="button" class="support-chat-float" id="supportChatFloat" aria-label="Aide rapide" aria-expanded="false" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.3 3.9A1 1 0 0 1 3 20.2V6a1 1 0 0 1 1-1v0zm1 2v11.7L8.3 15H19V6H5z"/></svg>
+</button>
+<div class="support-chat-panel" id="supportChatPanel" hidden>
+  <div class="support-chat-panel__header">
+    <span>Aide rapide</span>
+    <button type="button" class="support-chat-panel__close" id="supportChatClose" aria-label="Fermer">&times;</button>
+  </div>
+  <div class="support-chat-panel__body" id="supportChatBody"></div>
+</div>
 
 <script src="/js/script.js?v=1791474033"></script>
 </body>

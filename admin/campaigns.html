@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campagnes — VEINTUNO HOUSE Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+  <main class="admin-main">
+    <div class="admin-header">
+      <div>
+        <h1>Campagnes promotionnelles</h1>
+        <p>Regroupe plusieurs produits déjà en Flash Sale sous un nom commun (FRESH SALE, RAMADAN SALE...) avec une bannière et un compte à rebours synchronisé. Le prix réduit de chaque produit se règle toujours dans sa propre fiche (Produits → Flash Sale) — la campagne ne fait que les grouper et donner une date de fin commune.</p>
+      </div>
+      <div class="admin-header__actions">
+        <button type="button" class="admin-btn admin-btn--gold" id="newBtn">+ Nouvelle campagne</button>
+      </div>
+    </div>
+
+    <div class="admin-card" id="formCard" style="margin-bottom:24px;max-width:640px;display:none;">
+      <h2 style="font-family:var(--serif);font-size:19px;margin-bottom:18px;" id="formTitle">Nouvelle campagne</h2>
+      <form class="admin-form" id="campaignForm">
+        <input type="hidden" name="id">
+        <div class="admin-field">
+          <label>Nom (ex. FRESH SALE, RAMADAN SALE, BLACK FRIDAY)</label>
+          <input name="name" required>
+        </div>
+        <div class="admin-field">
+          <label>Description (optionnelle)</label>
+          <textarea name="description" rows="2"></textarea>
+        </div>
+        <div class="admin-field">
+          <label>Bannière</label>
+          <div id="bannerPreview" style="margin-bottom:8px;"></div>
+          <input type="file" id="bannerUpload" accept="image/*">
+          <input type="hidden" name="bannerImage">
+        </div>
+        <div class="admin-field">
+          <label>Début</label>
+          <input type="datetime-local" name="startAt" required>
+        </div>
+        <div class="admin-field">
+          <label>Fin</label>
+          <input type="datetime-local" name="endAt" required>
+        </div>
+        <div class="admin-field">
+          <label>Afficher le compte à rebours sur :</label>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="showOnHomepage" checked style="width:auto;"> Accueil</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="showOnProductCards" checked style="width:auto;"> Cartes produit</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="showOnProductPage" checked style="width:auto;"> Fiche produit</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="showOnBundles" checked style="width:auto;"> Bundles</label>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <input type="checkbox" name="isActive" checked style="width:auto;"> Active
+        </label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="submit" class="admin-btn admin-btn--gold">Enregistrer</button>
+          <button type="button" class="admin-btn" id="cancelBtn">Annuler</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>Nom</th><th>Période</th><th>Produits</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+      <div class="admin-table__empty" id="emptyState" style="display:none;">Aucune campagne pour l'instant.</div>
+    </div>
+    <p class="admin-field-help">Pour rattacher des produits à une campagne : ouvre le produit dans l'onglet Produits → section Flash Sale → choisis la campagne dans la liste.</p>
+  </main>
+</div>
+
+<script src="js/admin-shared.js"></script>
+<script>
+let items = [];
+
+function fmtDate(iso) {
+  return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function statusOf(c) {
+  const now = new Date();
+  if (!c.isActive) return 'Désactivée';
+  if (now < new Date(c.startAt)) return 'À venir';
+  if (now > new Date(c.endAt)) return 'Terminée';
+  return 'En cours';
+}
+
+function rowHTML(c) {
+  return `
+    <tr data-id="${c.id}">
+      <td><strong>${c.name}</strong></td>
+      <td>${fmtDate(c.startAt)} → ${fmtDate(c.endAt)}</td>
+      <td>${c._count ? c._count.products : 0}</td>
+      <td>${statusOf(c)}</td>
+      <td class="row-actions">
+        <button data-action="edit">Modifier</button>
+        <button data-action="delete" class="is-danger">Supprimer</button>
+      </td>
+    </tr>`;
+}
+
+async function loadAll() {
+  items = await adminApi('/campaigns');
+  document.getElementById('body').innerHTML = items.map(rowHTML).join('');
+  document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+}
+
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function showForm(item) {
+  const form = document.getElementById('campaignForm');
+  form.reset();
+  form.id.value = item ? item.id : '';
+  form.name.value = item ? item.name : '';
+  form.description.value = item ? (item.description || '') : '';
+  form.bannerImage.value = item ? (item.bannerImage || '') : '';
+  form.startAt.value = item ? toLocalInput(item.startAt) : '';
+  form.endAt.value = item ? toLocalInput(item.endAt) : '';
+  ['showOnHomepage', 'showOnProductCards', 'showOnProductPage', 'showOnBundles', 'isActive'].forEach((k) => {
+    form[k].checked = item ? !!item[k] : true;
+  });
+  document.getElementById('bannerPreview').innerHTML = item && item.bannerImage
+    ? `<img src="${item.bannerImage}" style="width:160px;height:90px;object-fit:cover;border-radius:8px;">` : '';
+  document.getElementById('formTitle').textContent = item ? 'Modifier la campagne' : 'Nouvelle campagne';
+  document.getElementById('formCard').style.display = 'block';
+}
+
+document.getElementById('newBtn').addEventListener('click', () => showForm(null));
+document.getElementById('cancelBtn').addEventListener('click', () => { document.getElementById('formCard').style.display = 'none'; });
+
+document.getElementById('bannerUpload').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const result = await uploadMediaFile(file);
+    document.querySelector('[name="bannerImage"]').value = result.url;
+    document.getElementById('bannerPreview').innerHTML = `<img src="${result.url}" style="width:160px;height:90px;object-fit:cover;border-radius:8px;">`;
+    toast('Bannière importée.');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('campaignForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const payload = {
+    name: fd.get('name'),
+    description: fd.get('description') || null,
+    bannerImage: fd.get('bannerImage') || null,
+    startAt: fd.get('startAt'),
+    endAt: fd.get('endAt'),
+    isActive: fd.get('isActive') === 'on',
+    showOnHomepage: fd.get('showOnHomepage') === 'on',
+    showOnProductCards: fd.get('showOnProductCards') === 'on',
+    showOnProductPage: fd.get('showOnProductPage') === 'on',
+    showOnBundles: fd.get('showOnBundles') === 'on',
+  };
+  try {
+    if (id) await adminApi(`/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    else await adminApi('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
+    toast('Campagne enregistrée.');
+    document.getElementById('formCard').style.display = 'none';
+    await loadAll();
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+document.getElementById('body').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const id = btn.closest('tr').dataset.id;
+  const item = items.find((c) => c.id === id);
+
+  if (btn.dataset.action === 'edit') showForm(item);
+  if (btn.dataset.action === 'delete') {
+    const ok = await confirmDialog(`Supprimer la campagne "${item.name}" ? Les produits liés redeviennent des Flash Sale indépendants (leurs prix promo restent actifs).`);
+    if (!ok) return;
+    try {
+      await adminApi(`/campaigns/${id}`, { method: 'DELETE' });
+      toast('Campagne supprimée.');
+      await loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+});
+
+(async () => {
+  const admin = await initAdminPage('campaigns.html');
+  if (!admin) return;
+  await loadAll();
+})();
+</script>
+</body>
+</html>

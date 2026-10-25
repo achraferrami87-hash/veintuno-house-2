@@ -25,6 +25,8 @@ const adminReviewsRoutes = require('./routes/adminReviews');
 const adminCharacteristicsRoutes = require('./routes/adminCharacteristics');
 const adminQuizRoutes = require('./routes/adminQuiz');
 const adminCollectionFiltersRoutes = require('./routes/adminCollectionFilters');
+const adminFaqRoutes = require('./routes/adminFaq');
+const adminCampaignsRoutes = require('./routes/adminCampaigns');
 
 const app = express();
 
@@ -79,6 +81,8 @@ app.use('/api/admin/reviews', requireAdmin, adminReviewsRoutes);
 app.use('/api/admin/characteristics', requireAdmin, adminCharacteristicsRoutes);
 app.use('/api/admin/quiz', requireAdmin, adminQuizRoutes);
 app.use('/api/admin/collection-filters', requireAdmin, adminCollectionFiltersRoutes);
+app.use('/api/admin/faq', requireAdmin, adminFaqRoutes);
+app.use('/api/admin/campaigns', requireAdmin, adminCampaignsRoutes);
 
 // ---------- Static files ----------
 // These three files change on every deploy; Vercel's edge was caching them
