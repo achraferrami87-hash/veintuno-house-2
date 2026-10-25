@@ -3431,12 +3431,23 @@ h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.01em; }
   max-height: 440px;
   display: flex;
   flex-direction: column;
+  animation: support-chat-in 0.2s ease;
   background: var(--white);
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0,0,0,0.25);
   border: 1px solid rgba(0,0,0,0.08);
 }
+/* The class above sets display:flex at author-origin specificity, which
+   otherwise beats the UA stylesheet's [hidden]{display:none} rule — without
+   this line, toggling the hidden attribute in JS has no visible effect and
+   the X button appears broken. */
+.support-chat-panel[hidden] { display: none; }
+@keyframes support-chat-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .support-chat-panel { animation: none; } }
 .support-chat-panel__header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; background: var(--black); color: var(--white);

@@ -93,7 +93,7 @@ function slideRowHTML(s) {
     <div class="editor-row" data-sortable-id="${s.id}" data-id="${s.id}" draggable="true">
       <span class="drag-handle">⠿</span>
       <div class="editor-row__body">
-        <div class="editor-row__title">${s.title.replace(/<[^>]+>/g, ' ')}</div>
+        <div class="editor-row__title">${s.title ? s.title.replace(/<[^>]+>/g, ' ') : (s.videoUrl ? 'Vidéo sans titre' : s.imageUrl ? 'Image sans titre' : '(slide vide)')}</div>
         <div class="editor-row__sub">${s.eyebrow || ''}</div>
       </div>
       ${s.isActive ? '<span class="badge badge--green">Actif</span>' : '<span class="badge badge--gray">Inactif</span>'}
@@ -140,7 +140,7 @@ function openSlideModal(slide) {
       <form class="admin-form" id="slideForm">
         <div class="admin-form__row">
           <div class="admin-field"><label>Eyebrow (petit texte au-dessus)</label><input name="eyebrow" value="${isEdit ? (slide.eyebrow || '') : ''}"></div>
-          <div class="admin-field"><label>Titre (HTML simple autorisé : &lt;br&gt;, &lt;em&gt;)</label><input name="title" required value="${isEdit ? slide.title : ''}"></div>
+          <div class="admin-field"><label>Titre (optionnel — HTML simple autorisé : &lt;br&gt;, &lt;em&gt;)</label><input name="title" value="${isEdit ? (slide.title || '') : ''}"></div>
         </div>
         <div class="admin-field"><label>Sous-titre</label><textarea name="subtitle">${isEdit ? (slide.subtitle || '') : ''}</textarea></div>
         <div class="admin-form__row">
@@ -192,6 +192,10 @@ function openSlideModal(slide) {
     const fd = new FormData(e.target);
     const payload = Object.fromEntries(fd.entries());
     payload.isActive = fd.get('isActive') === 'on';
+    if (!payload.title && !payload.imageUrl && !payload.videoUrl) {
+      toast('Ajoutez un titre, une image ou une vidéo.', 'error');
+      return;
+    }
     try {
       if (isEdit) await adminApi(`/homepage/slides/${slide.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       else await adminApi('/homepage/slides', { method: 'POST', body: JSON.stringify(payload) });

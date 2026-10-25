@@ -1035,19 +1035,23 @@ function renderHeroSlider(slides) {
     if (slide.ctaText1 && slide.ctaHref1) ctas.push({ text: slide.ctaText1, href: slide.ctaHref1, variant: 'gold' });
     if (slide.ctaText2 && slide.ctaHref2) ctas.push({ text: slide.ctaText2, href: slide.ctaHref2, variant: 'outline' });
     const ctasHTML = ctas.map((c) => `<a href="${c.href}" class="btn btn--${c.variant}">${c.text}</a>`).join('');
+    const hasText = !!(slide.eyebrow || slide.title || slide.subtitle || ctas.length);
 
-    return `
-      <div class="hero-slide${i === 0 ? ' is-active' : ''}" data-index="${i}">
-        ${mediaHTML}
+    const textHTML = hasText ? `
         <div class="hero-slide__overlay"></div>
         <div class="hero-slide__inner">
           <div class="hero-slide__content">
             ${slide.eyebrow ? `<p class="eyebrow">${slide.eyebrow}</p>` : ''}
-            <h1>${slide.title}</h1>
+            ${slide.title ? `<h1>${slide.title}</h1>` : ''}
             ${slide.subtitle ? `<p class="hero-slide__subtitle">${slide.subtitle}</p>` : ''}
-            <div class="hero-slide__actions">${ctasHTML}</div>
+            ${ctasHTML ? `<div class="hero-slide__actions">${ctasHTML}</div>` : ''}
           </div>
-        </div>
+        </div>` : '';
+
+    return `
+      <div class="hero-slide${i === 0 ? ' is-active' : ''}${hasText ? '' : ' hero-slide--media-only'}" data-index="${i}">
+        ${mediaHTML}
+        ${textHTML}
       </div>`;
   }).join('') + `
     <button type="button" class="hero-slider__arrow hero-slider__arrow--prev" aria-label="Slide précédent">
@@ -2955,6 +2959,20 @@ async function initSupportChat() {
 
   floatBtn.addEventListener('click', () => togglePanel(panel.hidden));
   closeBtn.addEventListener('click', () => togglePanel(false));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.hidden) togglePanel(false);
+  });
+  document.addEventListener('click', (e) => {
+    // composedPath() is captured at dispatch time, so it still reflects
+    // where the click happened even if the handler for that click (e.g.
+    // showAnswer) has already replaced body.innerHTML by the time this
+    // document-level listener runs — checking e.target here would see a
+    // detached node and wrongly treat the click as "outside".
+    const path = e.composedPath();
+    if (!panel.hidden && !path.includes(panel) && !path.includes(floatBtn)) {
+      togglePanel(false);
+    }
+  });
   floatBtn.hidden = false;
 }
 

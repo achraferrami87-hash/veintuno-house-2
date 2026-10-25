@@ -438,7 +438,7 @@ model StockLog {
 model HeroSlide {
   id               String   @id @default(cuid())
   eyebrow          String?
-  title            String
+  title            String?
   subtitle         String?
   imageUrl         String?
   videoUrl         String?

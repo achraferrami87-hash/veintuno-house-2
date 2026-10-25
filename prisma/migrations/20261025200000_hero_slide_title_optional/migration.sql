@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "HeroSlide" ALTER COLUMN "title" DROP NOT NULL;

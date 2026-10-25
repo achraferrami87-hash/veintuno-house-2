@@ -11,12 +11,16 @@ router.get('/slides', async (req, res) => {
 
 router.post('/slides', async (req, res) => {
   const body = req.body;
-  if (!body.title) return res.status(400).json({ error: 'Titre requis.' });
+  // Title is optional (image/video-only slides are valid) — a slide just
+  // needs SOME content so nothing fully blank gets published.
+  if (!body.title && !body.imageUrl && !body.videoUrl) {
+    return res.status(400).json({ error: 'Ajoutez un titre, une image ou une vidéo.' });
+  }
   const count = await prisma.heroSlide.count();
   const slide = await prisma.heroSlide.create({
     data: {
       eyebrow: body.eyebrow || null,
-      title: body.title,
+      title: body.title || null,
       subtitle: body.subtitle || null,
       imageUrl: body.imageUrl || null,
       videoUrl: body.videoUrl || null,
@@ -60,7 +64,7 @@ router.post('/slides/:id/duplicate', async (req, res) => {
   const original = await prisma.heroSlide.findUnique({ where: { id: req.params.id } });
   if (!original) return res.status(404).json({ error: 'Slide introuvable.' });
   const { id, createdAt, updatedAt, ...rest } = original;
-  const copy = await prisma.heroSlide.create({ data: { ...rest, title: `${original.title} (copie)`, isActive: false } });
+  const copy = await prisma.heroSlide.create({ data: { ...rest, title: original.title ? `${original.title} (copie)` : null, isActive: false } });
   res.status(201).json(copy);
 });
 
