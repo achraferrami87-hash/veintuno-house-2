@@ -6,11 +6,15 @@
   --gold: #D4AF37;
   --gold-light: #C5A059;
   --gray: #8a8578;
-  --serif: 'Cormorant Garamond', 'Playfair Display', serif;
-  /* Modern, clean, premium e-commerce sans — same role/hierarchy as before
-     (body copy, buttons, nav, forms); the serif above still carries all
-     headings/branding, unchanged. */
-  --sans: 'Plus Jakarta Sans', 'Manrope', 'Inter', sans-serif;
+  /* Single official site font (Inter) for both roles — Netflix Sans itself
+     is Netflix's proprietary in-house typeface and isn't licensable for
+     third-party use, so Inter was chosen as the closest open, legally
+     usable match: a clean geometric grotesque in the same family. Both
+     tokens point to it so every existing --serif/--sans selector (weights,
+     sizes, letter-spacing already set per element) just inherits the new
+     face without needing to be rewritten individually. */
+  --serif: 'Inter', -apple-system, sans-serif;
+  --sans: 'Inter', -apple-system, sans-serif;
 }
 
 @media (prefers-reduced-motion: reduce) {
