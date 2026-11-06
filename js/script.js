@@ -1024,9 +1024,18 @@ function renderHeroSlider(slides) {
   let current = 0;
   let timer = null;
 
+  // Videos get `data-src` instead of `src` and no `autoplay` attribute —
+  // a <video autoplay> starts buffering the instant it's in the DOM, and
+  // staying that way forever (loop) regardless of whether its ancestor is
+  // display:none, since CSS visibility never pauses an HTMLMediaElement.
+  // With initHomepage() running on every page (not just the homepage
+  // route), that meant every slide's video — active or not — downloaded
+  // in full on every single page view. Real bytes are only assigned and
+  // playback only started for the slide that's both current AND actually
+  // on screen (see the IntersectionObserver below).
   mount.innerHTML = slides.map((slide, i) => {
     const mediaHTML = slide.videoUrl
-      ? `<video class="hero-slide__media" autoplay muted loop playsinline src="${slide.videoUrl}"></video>`
+      ? `<video class="hero-slide__media" muted loop playsinline preload="none" data-src="${slide.videoUrl}"></video>`
       : slide.imageUrl
         ? `<div class="hero-slide__bg" style="background-image:url('${slide.imageUrl}')"></div>`
         : `<div class="hero-slide__bg" style="background:${slide.gradientFallback || '#0c0c0c'}"></div>`;
@@ -1064,28 +1073,57 @@ function renderHeroSlider(slides) {
       ${slides.map((_, i) => `<button type="button" class="hero-slider__dot${i === 0 ? ' is-active' : ''}" data-index="${i}" aria-label="Aller au slide ${i + 1}"></button>`).join('')}
     </div>`;
 
-  if (slides.length <= 1) return;
-
   const slideEls = Array.from(mount.querySelectorAll('.hero-slide'));
   const dotEls = Array.from(mount.querySelectorAll('.hero-slider__dot'));
   const prevBtn = mount.querySelector('.hero-slider__arrow--prev');
   const nextBtn = mount.querySelector('.hero-slider__arrow--next');
+  let heroVisible = false;
+
+  function videoOf(index) { return slideEls[index] ? slideEls[index].querySelector('video') : null; }
+
+  function playCurrentVideo() {
+    const v = videoOf(current);
+    if (!v) return;
+    if (!v.getAttribute('src') && v.dataset.src) { v.setAttribute('src', v.dataset.src); v.load(); }
+    v.play().catch(() => {});
+  }
+  function pauseVideo(index) { videoOf(index)?.pause(); }
 
   function goTo(index) {
+    const prevIndex = current;
     current = (index + slides.length) % slides.length;
     slideEls.forEach((el, i) => el.classList.toggle('is-active', i === current));
     dotEls.forEach((el, i) => el.classList.toggle('is-active', i === current));
+    pauseVideo(prevIndex);
+    if (heroVisible) playCurrentVideo();
   }
   function next() { goTo(current + 1); }
   function prev() { goTo(current - 1); }
-  function startAutoplay() { stopAutoplay(); timer = setInterval(next, 6500); }
+  function startAutoplay() { if (slides.length <= 1) return; stopAutoplay(); timer = setInterval(next, 6500); }
   function stopAutoplay() { if (timer) clearInterval(timer); }
+
+  // Only load/play a video — and only run the slide-advance timer — while
+  // the hero is actually visible. Catches both "not the homepage route"
+  // (the ancestor is display:none) and "scrolled past it on the
+  // homepage", neither of which a plain autoplay attribute respects.
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((entries) => {
+      heroVisible = entries[0].isIntersecting;
+      if (heroVisible) { playCurrentVideo(); startAutoplay(); } else { pauseVideo(current); stopAutoplay(); }
+    }, { threshold: 0.1 }).observe(mount);
+  } else {
+    heroVisible = true;
+    playCurrentVideo();
+    startAutoplay();
+  }
+
+  if (slides.length <= 1) return;
 
   prevBtn.addEventListener('click', () => { prev(); startAutoplay(); });
   nextBtn.addEventListener('click', () => { next(); startAutoplay(); });
   dotEls.forEach((dot) => dot.addEventListener('click', () => { goTo(Number(dot.dataset.index)); startAutoplay(); }));
   mount.addEventListener('mouseenter', stopAutoplay);
-  mount.addEventListener('mouseleave', startAutoplay);
+  mount.addEventListener('mouseleave', () => { if (heroVisible) startAutoplay(); });
 
   let touchStartX = null;
   mount.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
@@ -1095,8 +1133,6 @@ function renderHeroSlider(slides) {
     if (Math.abs(delta) > 40) { delta > 0 ? prev() : next(); startAutoplay(); }
     touchStartX = null;
   }, { passive: true });
-
-  startAutoplay();
 }
 
 // ===========================
@@ -1516,7 +1552,7 @@ function videoShowcaseCardHTML(v) {
   return `
     <div class="center-carousel__slide">
       <div class="video-showcase__card">
-        <video class="video-showcase__video" src="${v.videoUrl}" ${v.posterImage ? `poster="${v.posterImage}"` : ''} muted loop playsinline preload="metadata" controls></video>
+        <video class="video-showcase__video" src="${v.videoUrl}" ${v.posterImage ? `poster="${v.posterImage}"` : ''} muted loop playsinline preload="none" controls></video>
         ${v.title ? `<p class="video-showcase__caption">${escapeHtmlText(v.title)}</p>` : ''}
       </div>
     </div>`;
