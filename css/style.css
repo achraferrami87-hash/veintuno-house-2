@@ -1363,6 +1363,12 @@ em { font-style: italic; color: var(--gold); }
 @media (max-width: 900px) {
   .collections-page__grid { grid-template-columns: 1fr; }
   .hero-slider__arrow { display: none; }
+  /* Hero media is landscape (16:9); at 90vh on a narrow portrait screen
+     object-fit:cover had to zoom in to ~29% of the frame's width to cover
+     the container, cropping most of the shot and badly off-centering
+     whatever wasn't dead-center. A shorter box needs far less zoom
+     (~45-50% of the width shown at 60vh), so far less gets cropped. */
+  .hero-slider { min-height: 60vh; }
 }
 
 @media (max-width: 640px) {
