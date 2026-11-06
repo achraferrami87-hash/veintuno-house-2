@@ -53,6 +53,38 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Every Supabase storage URL in an API response is rewritten to the
+// Cloudflare-cached media subdomain (see the Worker at
+// media.veintunohouse.shop) before it leaves the server — one place, so
+// every current and future endpoint benefits without per-route changes.
+// Repeat visitors then hit Cloudflare's edge cache instead of Supabase's
+// own egress quota.
+const SUPABASE_STORAGE_ORIGIN = process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL}/storage/v1/object/public` : null;
+const CACHED_MEDIA_ORIGIN = 'https://media.veintunohouse.shop/storage/v1/object/public';
+
+function rewriteMediaUrls(value) {
+  if (!SUPABASE_STORAGE_ORIGIN) return value;
+  if (typeof value === 'string') {
+    return value.startsWith(SUPABASE_STORAGE_ORIGIN) ? CACHED_MEDIA_ORIGIN + value.slice(SUPABASE_STORAGE_ORIGIN.length) : value;
+  }
+  if (Array.isArray(value)) return value.map(rewriteMediaUrls);
+  // Restricted to plain objects so Date instances (serialized to ISO
+  // strings by JSON.stringify) pass through untouched instead of being
+  // flattened into {} by Object.keys().
+  if (value && typeof value === 'object' && value.constructor === Object) {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = rewriteMediaUrls(value[key]);
+    return out;
+  }
+  return value;
+}
+
+app.use('/api', (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => originalJson(rewriteMediaUrls(body));
+  next();
+});
+
 // ---------- Public API (storefront) ----------
 app.use('/api', publicRoutes);
 
