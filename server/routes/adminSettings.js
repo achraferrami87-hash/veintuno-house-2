@@ -42,6 +42,9 @@ router.put('/', async (req, res) => {
   if (body.metaPixelId !== undefined) {
     data.metaPixelId = body.metaPixelId.toString().trim() || null;
   }
+  if (body.showCollectionsNav !== undefined) {
+    data.showCollectionsNav = !!body.showCollectionsNav;
+  }
 
   const updated = await prisma.siteSettings.update({ where: { id: settings.id }, data });
   res.json(updated);

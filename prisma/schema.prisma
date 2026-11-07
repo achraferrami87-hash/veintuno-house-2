@@ -661,6 +661,7 @@ model SiteSettings {
   announcementMessages String @default("[]")
   trustSignals      String   @default("[]") // JSON array of admin-entered trust statements
   metaPixelId       String?  // Meta (Facebook) Pixel ID — the storefront only loads the Pixel script when this is set
+  showCollectionsNav Boolean @default(true) // "Collections" dropdown in the main nav — the only nav item not already a NavMenuItem row
   updatedAt         DateTime @updatedAt
 }
 

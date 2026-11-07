@@ -2836,7 +2836,10 @@ async function initNavExtras() {
   const panel = document.getElementById('collectionsDropdownPanel');
   const menuMount = document.getElementById('navMenuItems');
 
-  if (dropdown && panel) {
+  const settings = await getSiteSettings();
+  if (dropdown && settings && settings.showCollectionsNav === false) dropdown.hidden = true;
+
+  if (dropdown && panel && !dropdown.hidden) {
     try {
       // Hiding a collection from the navbar (showInNav=false) must never hide
       // it from the site — it stays fully reachable via /collections.
