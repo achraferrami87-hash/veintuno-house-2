@@ -273,7 +273,12 @@ function stripAccents(str) {
 // typing a name" than a plain substring-anywhere match.
 function matchesByWordPrefix(text, q) {
   if (!q) return true;
-  return text.split(/\s+/).some((word) => word.startsWith(q));
+  const words = text.split(/\s+/);
+  // Every word of the query must prefix-match some word of the text — not
+  // the whole query against a single word, which could never match once
+  // the query itself contained a space (e.g. "jpg pa" was being compared
+  // as one literal prefix, which no single word could ever start with).
+  return q.split(/\s+/).filter(Boolean).every((token) => words.some((word) => word.startsWith(token)));
 }
 
 function initFragranceToolbar({ searchInput, genderFilter, cards, emptyMsg }) {
